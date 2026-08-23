@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# 
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eDoktor.API", "eDoktor.API\eDoktor.API.csproj", "{B01FD14C-866B-43B7-9F3C-ED635CE9F79B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{F31D7EF0-BBBC-4D15-AF73-A7CBE550CA69}"
+	ProjectSection(SolutionItems) = preProject
+		compose.yaml = compose.yaml
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eDoktor.Services", "eDoktor.Services\eDoktor.Services.csproj", "{548B2680-8EF3-450F-B4F2-28D58FA09B78}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eDoktor.Model", "eDoktor.Model\eDoktor.Model.csproj", "{6A3F866C-89D4-407F-AF85-B14EEBD4DD45}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "eDoktor.Worker", "eDoktor.Worker\eDoktor.Worker.csproj", "{E56C0AD2-E53A-4E9C-929D-50FBD36A6837}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B01FD14C-866B-43B7-9F3C-ED635CE9F79B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B01FD14C-866B-43B7-9F3C-ED635CE9F79B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B01FD14C-866B-43B7-9F3C-ED635CE9F79B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B01FD14C-866B-43B7-9F3C-ED635CE9F79B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{548B2680-8EF3-450F-B4F2-28D58FA09B78}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{548B2680-8EF3-450F-B4F2-28D58FA09B78}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{548B2680-8EF3-450F-B4F2-28D58FA09B78}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{548B2680-8EF3-450F-B4F2-28D58FA09B78}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A3F866C-89D4-407F-AF85-B14EEBD4DD45}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A3F866C-89D4-407F-AF85-B14EEBD4DD45}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A3F866C-89D4-407F-AF85-B14EEBD4DD45}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A3F866C-89D4-407F-AF85-B14EEBD4DD45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E56C0AD2-E53A-4E9C-929D-50FBD36A6837}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E56C0AD2-E53A-4E9C-929D-50FBD36A6837}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E56C0AD2-E53A-4E9C-929D-50FBD36A6837}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E56C0AD2-E53A-4E9C-929D-50FBD36A6837}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

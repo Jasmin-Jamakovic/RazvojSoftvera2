@@ -1,0 +1,6 @@
+@eDoktor.API_HostAddress = http://localhost:5190
+
+GET {{eDoktor.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

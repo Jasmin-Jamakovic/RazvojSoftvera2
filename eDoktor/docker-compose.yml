@@ -1,0 +1,112 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${_saPassword}
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P ${_saPassword} -C -Q 'SELECT 1' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - edoktor-2025
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      - RABBITMQ_DEFAULT_USER=${_rabbitMqUser}
+      - RABBITMQ_DEFAULT_PASS=${_rabbitMqPassword}
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    networks:
+      - edoktor-2025
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edoktor-2025
+
+  edoktor-api:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5190
+      - ConnectionStrings__DefaultConnection=Server=${_source},1433;Database=${_catalog};User=sa;Password=${_saPassword};ConnectRetryCount=0;TrustServerCertificate=True
+      - _saPassword=${_saPassword}
+      - _rabbitMqHost=${_rabbitMqHost}
+      - _rabbitMqUser=${_rabbitMqUser}
+      - _rabbitMqPassword=${_rabbitMqPassword}
+      - _rabbitMqPort=${_rabbitMqPort}
+      - Redis__ConnectionString=${Redis__ConnectionString}
+      - Jwt__Issuer=${Jwt__Issuer}
+      - Jwt__Audience=${Jwt__Audience}
+      - Jwt__Key=${Jwt__Key}
+      - Jwt__ExpiryMinutes=${Jwt__ExpiryMinutes}
+      - PayPal__ClientId=${PayPal__ClientId}
+      - PayPal__ClientSecret=${PayPal__ClientSecret}
+      - PayPal__BaseUrl=${PayPal__BaseUrl}
+      - PayPal__WebhookId=${PayPal__WebhookId}
+    ports:
+      - "5190:5190"
+    networks:
+      - edoktor-2025
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: eDoktor.Worker/Dockerfile
+    restart: on-failure
+    environment:
+      - _fromAddress=${_fromAddress}
+      - _password=${_password}
+      - _host=${_host}
+      - _enableSSL=${_enableSSL}
+      - _displayName=${_displayName}
+      - _timeout=${_timeout}
+      - _port=${_port}
+      - _rabbitMqHost=${_rabbitMqHost}
+      - _rabbitMqUser=${_rabbitMqUser}
+      - _rabbitMqPassword=${_rabbitMqPassword}
+      - _rabbitMqPort=${_rabbitMqPort}
+    networks:
+      - edoktor-2025
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+networks:
+  edoktor-2025:
+    driver: bridge

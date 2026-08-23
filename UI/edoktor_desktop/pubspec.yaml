@@ -1,0 +1,27 @@
+name: edoktor_desktop
+description: "eDoktor admin desktop app."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  http: ^1.2.0
+  provider: ^6.1.5
+  shared_preferences: ^2.2.2
+  intl: 0.20.2
+  fl_chart: ^0.66.0
+  pdf: ^3.11.1
+  printing: ^5.13.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
