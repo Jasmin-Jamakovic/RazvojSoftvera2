@@ -50,3 +50,38 @@ class Appointment {
         price: (j['price'] ?? 0).toDouble(),
         payment: j['payment'] as Map<String, dynamic>?);
 }
+
+class Payment {
+  final int id, appointmentId;
+  final String? captureId;
+  final double amount;
+  final String currency, status;
+  final DateTime createdAt;
+  final DateTime? capturedAt, refundedAt, appointmentStart;
+  final String? patientName, doctorName, appointmentStatus;
+  Payment({required this.id, required this.appointmentId, this.captureId, required this.amount, required this.currency, required this.status, required this.createdAt, this.capturedAt, this.refundedAt, this.appointmentStart, this.patientName, this.doctorName, this.appointmentStatus});
+  bool get canRefund => status == 'Captured' && captureId != null && appointmentStatus == 'Cancelled';
+  static DateTime? _d(dynamic v) => v == null ? null : DateTime.parse(v).toLocal();
+  factory Payment.fromJson(Map<String, dynamic> j) => Payment(
+        id: j['id'], appointmentId: j['appointmentId'], captureId: j['captureId'],
+        amount: (j['amount'] ?? 0).toDouble(), currency: j['currency'] ?? 'EUR', status: j['status'] ?? '',
+        createdAt: DateTime.parse(j['createdAt']).toLocal(),
+        capturedAt: _d(j['capturedAt']), refundedAt: _d(j['refundedAt']), appointmentStart: _d(j['appointmentStartUtc']),
+        patientName: j['patientName'], doctorName: j['doctorName'], appointmentStatus: j['appointmentStatus']);
+}
+
+class PaymentSummary {
+  final double totalCaptured, totalRefunded, netRevenue;
+  final int capturedCount, refundedCount, pendingCount;
+  PaymentSummary({required this.totalCaptured, required this.totalRefunded, required this.netRevenue, required this.capturedCount, required this.refundedCount, required this.pendingCount});
+  factory PaymentSummary.fromJson(Map<String, dynamic> j) => PaymentSummary(
+        totalCaptured: (j['totalCaptured'] ?? 0).toDouble(), totalRefunded: (j['totalRefunded'] ?? 0).toDouble(),
+        netRevenue: (j['netRevenue'] ?? 0).toDouble(), capturedCount: j['capturedCount'] ?? 0,
+        refundedCount: j['refundedCount'] ?? 0, pendingCount: j['pendingCount'] ?? 0);
+}
+
+class PagedList<T> {
+  final List<T> items;
+  final int totalCount;
+  PagedList(this.items, this.totalCount);
+}

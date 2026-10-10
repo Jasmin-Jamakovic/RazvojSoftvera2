@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../models/dashboard.dart';
 import '../models/entities.dart';
+import '../utils/labels.dart';
 
 /// Builds the two downloadable/printable PDF reports for the admin app.
 class ReportPdf {
@@ -122,6 +123,47 @@ class ReportPdf {
                     a.type == 1 ? 'Online' : 'U ordinaciji',
                     a.status,
                     _money.format(a.price),
+                  ])
+              .toList(),
+        ),
+      ],
+    ));
+    return doc;
+  }
+
+  /// Report 3 — financial report: PayPal transactions in the selected period with totals.
+  static pw.Document payments(List<Payment> items, PaymentSummary summary, {required String filterDescription}) {
+    final doc = pw.Document();
+    doc.addPage(pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.all(28),
+      footer: _footer,
+      build: (ctx) => [
+        _header('Finansijski izvještaj', subtitle: '$filterDescription · ${items.length} transakcija'),
+        pw.SizedBox(height: 8),
+        pw.Wrap(spacing: 16, runSpacing: 8, children: [
+          _kpi('Ukupno naplaćeno', _money.format(summary.totalCaptured)),
+          _kpi('Vraćeno (refund)', _money.format(summary.totalRefunded)),
+          _kpi('Neto prihod', _money.format(summary.netRevenue)),
+          _kpi('Naplaćene uplate', '${summary.capturedCount}'),
+          _kpi('Vraćene uplate', '${summary.refundedCount}'),
+          _kpi('Na čekanju', '${summary.pendingCount}'),
+        ]),
+        pw.SizedBox(height: 16),
+        pw.TableHelper.fromTextArray(
+          headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF0D47A1)),
+          cellStyle: const pw.TextStyle(fontSize: 9),
+          cellAlignments: {0: pw.Alignment.centerLeft, 1: pw.Alignment.centerLeft, 2: pw.Alignment.centerLeft, 3: pw.Alignment.center, 4: pw.Alignment.centerRight},
+          oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F5F9)),
+          headers: ['Datum uplate', 'Pacijent', 'Ljekar', 'Status', 'Iznos'],
+          data: items
+              .map((p) => [
+                    _date.format(p.createdAt),
+                    p.patientName ?? '-',
+                    p.doctorName ?? '-',
+                    paymentStatusLabel(p.status),
+                    _money.format(p.amount),
                   ])
               .toList(),
         ),

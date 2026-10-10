@@ -14,5 +14,11 @@ namespace eDoktor.Model.Responses
         public DateTime CreatedAt { get; set; }
         public DateTime? CapturedAt { get; set; }
         public DateTime? RefundedAt { get; set; }
+
+        // Filled only by the payment list endpoint (transaction overview).
+        public string? PatientName { get; set; }
+        public string? DoctorName { get; set; }
+        public DateTime? AppointmentStartUtc { get; set; }
+        public string? AppointmentStatus { get; set; }
     }
 }

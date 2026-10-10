@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using eDoktor.Model;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
+using eDoktor.Model.SearchObjects;
 using eDoktor.Services.Payments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +18,14 @@ namespace eDoktor.API.Controllers
 
         public PaymentsController(IPaymentService payments) => _payments = payments;
 
+        [HttpGet]
+        public Task<PagedResult<PaymentResponse>> Get([FromQuery] PaymentSearchObject s)
+            => _payments.GetAsync(s);
+
+        [HttpGet("summary"), Authorize(Roles = Roles.Admin)]
+        public Task<PaymentSummaryResponse> Summary([FromQuery] PaymentSearchObject s)
+            => _payments.GetSummaryAsync(s);
+
         [HttpPost("paypal/orders")]
         public Task<PayPalOrderResponse> CreateOrder(PayPalCreateOrderRequest req)
             => _payments.CreateOrderAsync(req);
@@ -27,7 +36,7 @@ namespace eDoktor.API.Controllers
 
         [HttpPost("paypal/captures/{captureId}/refund"), Authorize(Roles = Roles.Admin)]
         public async Task<IActionResult> Refund(string captureId, PayPalRefundRequest req)
-            => await _payments.RefundAsync(captureId, req.Amount, req.Reason) ? Ok() : BadRequest("Refund failed");
+            => await _payments.RefundAsync(captureId, req.Reason) ? Ok() : BadRequest("Refund failed");
 
         [HttpPost("paypal/webhook"), AllowAnonymous]
         public async Task<IActionResult> Webhook()

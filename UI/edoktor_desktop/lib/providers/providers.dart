@@ -102,6 +102,24 @@ class AppointmentProvider extends ChangeNotifier {
 }
 
 class PaymentProvider extends ChangeNotifier {
+  Map<String, dynamic> _filter({String? search, String? status, DateTime? from, DateTime? to}) => {
+        'search': search?.trim().isEmpty == true ? null : search?.trim(),
+        'status': status,
+        'from': from?.toUtc().toIso8601String(),
+        'to': to?.toUtc().toIso8601String(),
+      };
+
+  Future<PagedList<Payment>> list({String? search, String? status, DateTime? from, DateTime? to, int page = 0, int pageSize = 20}) async {
+    final res = await ApiClient.get('/api/payments', query: {..._filter(search: search, status: status, from: from, to: to), 'page': page, 'pageSize': pageSize});
+    final items = (res['items'] as List? ?? []).map((e) => Payment.fromJson(e)).toList();
+    return PagedList(items, res['totalCount'] ?? items.length);
+  }
+
+  Future<PaymentSummary> summary({String? search, String? status, DateTime? from, DateTime? to}) async {
+    final res = await ApiClient.get('/api/payments/summary', query: _filter(search: search, status: status, from: from, to: to));
+    return PaymentSummary.fromJson(res);
+  }
+
   Future<void> refund(String captureId, {String? reason}) async {
     await ApiClient.post('/api/payments/paypal/captures/$captureId/refund', {'reason': reason});
   }

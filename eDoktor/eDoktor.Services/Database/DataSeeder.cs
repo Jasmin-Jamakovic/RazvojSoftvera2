@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using eDoktor.Model;
 using eDoktor.Services.Auth;
 using eDoktor.Services.Database.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -272,6 +273,28 @@ namespace eDoktor.Services.Database
             }
             db.TimeSlots.AddRange(freeSlots);
 
+            db.SaveChanges();
+
+            // PayPal transaction history for the paid appointments (needs the appointment ids generated above).
+            // apt6 was cancelled more than 24h ahead, so its payment has already been refunded.
+            var paid = new[] { apt1, apt2, apt3, apt4, apt6 };
+            var payments = paid.Select(a => new PayPalPayment
+            {
+                AppointmentId = a.Id,
+                OrderId = $"SEED-ORDER-{a.Id}",
+                CaptureId = $"SEED-CAPTURE-{a.Id}",
+                Amount = a.Price,
+                Currency = "EUR",
+                Status = a == apt6 ? PaymentStatus.Refunded : PaymentStatus.Captured,
+                CreatedAt = a.CreatedAt,
+                CapturedAt = a.CreatedAt.AddMinutes(5),
+                RefundedAt = a == apt6 ? a.CancelledAt : null
+            }).ToList();
+            db.PayPalPayments.AddRange(payments);
+            db.SaveChanges();
+
+            for (int i = 0; i < paid.Length; i++)
+                paid[i].PayPalPaymentId = payments[i].Id;
             db.SaveChanges();
         }
     }

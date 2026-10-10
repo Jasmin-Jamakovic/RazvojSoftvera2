@@ -8,6 +8,7 @@ import 'clinics_screen.dart';
 import 'cities_screen.dart';
 import 'appointments_screen.dart';
 import 'patients_screen.dart';
+import 'payments_screen.dart';
 import 'reports_screen.dart';
 import 'login_screen.dart';
 
@@ -28,6 +29,7 @@ class _ShellScreenState extends State<ShellScreen> {
     ('Gradovi', Icons.location_city),
     ('Termini', Icons.event),
     ('Pacijenti', Icons.people),
+    ('Plaćanja', Icons.payments),
     ('Izvještaji', Icons.bar_chart),
   ];
 
@@ -39,7 +41,8 @@ class _ShellScreenState extends State<ShellScreen> {
         4 => const CitiesScreen(),
         5 => const AppointmentsScreen(),
         6 => const PatientsScreen(),
-        7 => const ReportsScreen(),
+        7 => const PaymentsScreen(),
+        8 => const ReportsScreen(),
         _ => const SizedBox(),
       };
 

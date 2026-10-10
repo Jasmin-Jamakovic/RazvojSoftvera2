@@ -5,6 +5,7 @@ using eDoktor.Model;
 using eDoktor.Model.Messages;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
+using eDoktor.Model.SearchObjects;
 using eDoktor.Services.Appointments;
 using eDoktor.Services.AppointmentStateMachine;
 using eDoktor.Services.Auth;
@@ -42,6 +43,100 @@ namespace eDoktor.Services.Payments
             _current = current;
             _appointments = appointments;
             _mapper = mapper;
+        }
+
+        public async Task<PagedResult<PaymentResponse>> GetAsync(PaymentSearchObject search)
+        {
+            search.Normalize();
+            var q = await FilterAsync(search);
+
+            int? total = search.IncludeTotalCount ? await q.CountAsync() : null;
+
+            var items = await q
+                .OrderByDescending(x => x.Payment.CreatedAt)
+                .Skip(search.Page!.Value * search.PageSize!.Value)
+                .Take(search.PageSize!.Value)
+                .Select(x => new PaymentResponse
+                {
+                    Id = x.Payment.Id,
+                    AppointmentId = x.Payment.AppointmentId,
+                    OrderId = x.Payment.OrderId,
+                    CaptureId = x.Payment.CaptureId,
+                    Amount = x.Payment.Amount,
+                    Currency = x.Payment.Currency,
+                    Status = x.Payment.Status,
+                    CreatedAt = x.Payment.CreatedAt,
+                    CapturedAt = x.Payment.CapturedAt,
+                    RefundedAt = x.Payment.RefundedAt,
+                    PatientName = x.Appointment.Patient.FirstName + " " + x.Appointment.Patient.LastName,
+                    DoctorName = x.Appointment.Doctor.User.FirstName + " " + x.Appointment.Doctor.User.LastName,
+                    AppointmentStartUtc = x.Appointment.TimeSlot.StartUtc,
+                    AppointmentStatus = x.Appointment.StateMachine.Replace("AppointmentState", string.Empty)
+                })
+                .ToListAsync();
+
+            return new PagedResult<PaymentResponse> { Items = items, TotalCount = total };
+        }
+
+        public async Task<PaymentSummaryResponse> GetSummaryAsync(PaymentSearchObject search)
+        {
+            var q = await FilterAsync(search);
+
+            // One grouped query instead of a separate round-trip per status.
+            var byStatus = await q
+                .GroupBy(x => x.Payment.Status)
+                .Select(g => new { Status = g.Key, Count = g.Count(), Sum = g.Sum(x => x.Payment.Amount) })
+                .ToListAsync();
+
+            decimal SumOf(string status) => byStatus.Where(s => s.Status == status).Select(s => s.Sum).FirstOrDefault();
+            int CountOf(string status) => byStatus.Where(s => s.Status == status).Select(s => s.Count).FirstOrDefault();
+
+            // A refunded payment was captured first, so it counts toward gross captured volume.
+            var captured = SumOf(PaymentStatus.Captured) + SumOf(PaymentStatus.Refunded);
+            var refunded = SumOf(PaymentStatus.Refunded);
+            return new PaymentSummaryResponse
+            {
+                TotalCaptured = captured,
+                TotalRefunded = refunded,
+                NetRevenue = captured - refunded,
+                CapturedCount = CountOf(PaymentStatus.Captured),
+                RefundedCount = CountOf(PaymentStatus.Refunded),
+                PendingCount = CountOf(PaymentStatus.Created)
+            };
+        }
+
+        private async Task<IQueryable<PaymentRow>> FilterAsync(PaymentSearchObject s)
+        {
+            // Patients only ever see their own transactions; doctors have no access to payment data.
+            var role = await _current.GetUserRoleAsync();
+            if (role == Roles.Patient)
+                s.PatientId = await _current.GetUserIdAsync();
+            else if (role != Roles.Admin)
+                throw new ForbiddenException("You are not allowed to view payments.");
+
+            var q = from p in _db.PayPalPayments
+                    join a in _db.Appointments on p.AppointmentId equals a.Id
+                    select new PaymentRow { Payment = p, Appointment = a };
+
+            if (s.PatientId.HasValue) q = q.Where(x => x.Appointment.PatientId == s.PatientId.Value);
+            if (s.DoctorId.HasValue) q = q.Where(x => x.Appointment.DoctorId == s.DoctorId.Value);
+            if (!string.IsNullOrWhiteSpace(s.Status)) q = q.Where(x => x.Payment.Status == s.Status);
+            if (s.From.HasValue) q = q.Where(x => x.Payment.CreatedAt >= s.From.Value);
+            if (s.To.HasValue) q = q.Where(x => x.Payment.CreatedAt < s.To.Value);
+            if (!string.IsNullOrWhiteSpace(s.Search))
+            {
+                var term = s.Search.Trim();
+                q = q.Where(x =>
+                    (x.Appointment.Patient.FirstName + " " + x.Appointment.Patient.LastName).Contains(term) ||
+                    (x.Appointment.Doctor.User.FirstName + " " + x.Appointment.Doctor.User.LastName).Contains(term));
+            }
+            return q;
+        }
+
+        private class PaymentRow
+        {
+            public PayPalPayment Payment { get; set; } = null!;
+            public Appointment Appointment { get; set; } = null!;
         }
 
         public async Task<PayPalOrderResponse> CreateOrderAsync(PayPalCreateOrderRequest req)
@@ -128,21 +223,22 @@ namespace eDoktor.Services.Payments
             return _mapper.Map<PaymentResponse>(payment);
         }
 
-        public async Task<bool> RefundAsync(string captureId, decimal? amount, string? reason)
+        public async Task<bool> RefundAsync(string captureId, string? reason)
         {
-            var payment = await _db.PayPalPayments.FirstOrDefaultAsync(p => p.CaptureId == captureId);
+            var payment = await _db.PayPalPayments.FirstOrDefaultAsync(p => p.CaptureId == captureId)
+                ?? throw new NotFoundException("Uplata nije pronađena.");
+
+            // Only a captured payment can be refunded; this also stops the same payment being refunded twice.
+            if (payment.Status != PaymentStatus.Captured)
+                throw new UserException("Povrat sredstava je moguć samo za naplaćene uplate.");
 
             // Refund the amount actually charged (from our record), not a value supplied by the client.
-            var refundAmount = payment?.Amount ?? amount;
-            var ok = await _paypal.RefundAsync(captureId, refundAmount, reason);
+            var ok = await _paypal.RefundAsync(captureId, payment.Amount, reason);
             if (!ok) return false;
 
-            if (payment != null)
-            {
-                payment.Status = PaymentStatus.Refunded;
-                payment.RefundedAt = System.DateTime.UtcNow;
-                await _db.SaveChangesAsync();
-            }
+            payment.Status = PaymentStatus.Refunded;
+            payment.RefundedAt = System.DateTime.UtcNow;
+            await _db.SaveChangesAsync();
             return true;
         }
 
