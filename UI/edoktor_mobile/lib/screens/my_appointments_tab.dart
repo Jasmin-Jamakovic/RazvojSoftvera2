@@ -4,6 +4,7 @@ import '../models/appointment.dart';
 import '../providers/appointment_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/confirm.dart';
+import '../widgets/consultation_chat.dart';
 import '../widgets/review_sheet.dart';
 import '../widgets/ui.dart';
 import 'paypal_checkout_screen.dart';
@@ -55,12 +56,19 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
       final url = res['joinUrl'] as String?;
       if (url == null || !mounted) return;
       Navigator.push(context, MaterialPageRoute(
-        builder: (_) => VideoCallScreen(joinUrl: url, doctorName: a.doctorName ?? 'ljekar'),
+        builder: (_) => VideoCallScreen(appointmentId: a.id, joinUrl: url, doctorName: a.doctorName ?? 'ljekar'),
       ));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     }
   }
+
+  void _openChat(Appointment a) => Navigator.push(context, MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text('Poruke — ${a.doctorName ?? 'ljekar'}')),
+          body: ConsultationChat(appointmentId: a.id),
+        ),
+      ));
 
   Future<void> _review(Appointment a) async {
     if (!await ReviewSheet.show(context, a) || !mounted) return;
@@ -120,6 +128,7 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
                     onJoin: _join,
                     onCancel: _cancel,
                     onReview: _review,
+                    onChat: _openChat,
                   ),
                 );
               },
@@ -138,6 +147,7 @@ class _AppointmentCard extends StatelessWidget {
   final ValueChanged<Appointment> onJoin;
   final ValueChanged<Appointment> onCancel;
   final ValueChanged<Appointment> onReview;
+  final ValueChanged<Appointment> onChat;
 
   const _AppointmentCard({
     required this.appointment,
@@ -146,6 +156,7 @@ class _AppointmentCard extends StatelessWidget {
     required this.onJoin,
     required this.onCancel,
     required this.onReview,
+    required this.onChat,
   });
 
   @override
@@ -171,6 +182,13 @@ class _AppointmentCard extends StatelessWidget {
           icon: Icons.videocam,
           style: featured ? _ActionStyle.white : _ActionStyle.primary,
           onTap: () => onJoin(a),
+        ),
+      if (a.status == 'Confirmed' && a.isOnline && !canJoin)
+        _ActionButton(
+          label: 'Poruke',
+          icon: Icons.chat_bubble_outline,
+          style: featured ? _ActionStyle.white : _ActionStyle.soft,
+          onTap: () => onChat(a),
         ),
       if (a.canReview)
         _ActionButton(label: 'Ocijeni ljekara', icon: Icons.star_outline_rounded, style: _ActionStyle.primary, onTap: () => onReview(a)),

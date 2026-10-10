@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import '../models/consultation_message.dart';
 import '../models/appointment.dart';
 import '../services/api_client.dart';
 
@@ -25,6 +27,23 @@ class AppointmentProvider extends ChangeNotifier {
       'comment': (comment?.trim().isEmpty ?? true) ? null : comment!.trim(),
     });
   }
+
+  /// One page of the consultation chat, newest first, plus the total message count.
+  Future<(List<ConsultationMessage>, int)> messages(int appointmentId, {int page = 0, int pageSize = 30}) async {
+    final res = await ApiClient.get('/api/video-calls/$appointmentId/messages', query: {'page': page, 'pageSize': pageSize});
+    final items = (res['items'] as List? ?? []).map((e) => ConsultationMessage.fromJson(e)).toList();
+    return (items, (res['totalCount'] as int?) ?? items.length);
+  }
+
+  Future<ConsultationMessage> sendMessage(int appointmentId, {String? text, Uint8List? image}) async {
+    final res = await ApiClient.post('/api/video-calls/$appointmentId/messages', {
+      'text': text,
+      'image': image == null ? null : base64Encode(image),
+    });
+    return ConsultationMessage.fromJson(res);
+  }
+
+  String messageImagePath(int appointmentId, int messageId) => '/api/video-calls/$appointmentId/messages/$messageId/image';
 
   Future<Map<String, dynamic>> roomFor(int appointmentId) async {
     final res = await ApiClient.post('/api/video-calls/$appointmentId/room');

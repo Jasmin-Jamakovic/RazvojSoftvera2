@@ -162,6 +162,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IRecommenderService, RecommenderService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IVideoCallService, VideoCallService>();
+builder.Services.AddScoped<IConsultationChatService, ConsultationChatService>();
 
 // Appointment state machine
 builder.Services.AddScoped<BaseAppointmentState>();

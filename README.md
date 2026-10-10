@@ -156,14 +156,14 @@ Formula:
 score(d) = 0.50 · sim(p,d) + 0.25 · norm(rating(d)) + 0.15 · distDecay(d) + 0.10 · availability(d)
 ```
 
-- **sim(p,d)** — cosine similarity between the patient's TF-IDF profile vector and the doctor's TF-IDF feature vector. The doctor's vector is built from specialization, sub-keywords from bio, and clinic city. The patient's vector is built from specializations of past appointments + diagnosis / therapy / notes in their medical record.
+- **sim(p,d)** — cosine similarity between the patient's TF-IDF profile vector and the doctor's TF-IDF feature vector. The doctor's vector is built from specialization, sub-keywords from bio, and clinic city. The patient's vector is built from specializations of past appointments (doctors the patient rated 4–5 count double, doctors rated 1–2 are left out), diagnosis / therapy / notes in their medical record, and their last 20 doctor searches (typed text + chosen specialization, stored in `SearchHistories`).
 - **norm(rating(d))** — average review rating, scaled to `[0, 1]` by dividing by 5.
 - **distDecay(d)** — `exp(-distance_km / 25)` between the patient's stored coordinates and the clinic's coordinates. Falls back to `1.0` when locations are unknown.
 - **availability(d)** — `1` if the doctor has any free time slot in the next 7 days, else `0`.
 
 Each recommendation carries a short reason ("Visoko ocijenjen ljekar", "Ljekar u vašoj blizini", "Dostupan u narednih 7 dana", …) derived from the dominant scoring component.
 
-The full ranked list is cached in **Redis** under `recs:{patientId}` for 6 hours. The cache is invalidated when a patient submits a new review (so future runs reflect the new opinion). Cold-start (no review history) is handled automatically: with an empty patient vector, the similarity term collapses to 0 and the ranking falls back to rating + availability + distance.
+The full ranked list is cached in **Redis** under `recs:{patientId}` for 6 hours. The cache is invalidated when the patient books an appointment, an appointment is completed, the patient submits a review, or makes a new search (so the next run reflects the new data). Cold-start (no review history) is handled automatically: with an empty patient vector, the similarity term collapses to 0 and the ranking falls back to rating + availability + distance.
 
 ## Messaging (RabbitMQ)
 The Worker (`eDoktor.Worker`) consumes:

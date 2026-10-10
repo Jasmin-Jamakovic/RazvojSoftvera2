@@ -27,6 +27,8 @@ namespace eDoktor.Services.Database
         public DbSet<PayPalPayment> PayPalPayments { get; set; } = null!;
         public DbSet<VideoCallSession> VideoCallSessions { get; set; } = null!;
         public DbSet<PasswordResetCode> PasswordResetCodes { get; set; } = null!;
+        public DbSet<ConsultationMessage> ConsultationMessages { get; set; } = null!;
+        public DbSet<SearchHistory> SearchHistories { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -37,6 +39,30 @@ namespace eDoktor.Services.Database
             modelBuilder.Entity<Role>().HasIndex(r => r.Name).IsUnique();
             modelBuilder.Entity<Specialization>().HasIndex(s => s.Name).IsUnique();
             modelBuilder.Entity<City>().HasIndex(c => c.Name).IsUnique();
+
+            modelBuilder.Entity<ConsultationMessage>()
+                .HasOne(m => m.Appointment)
+                .WithMany()
+                .HasForeignKey(m => m.AppointmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<ConsultationMessage>()
+                .HasOne(m => m.Sender)
+                .WithMany()
+                .HasForeignKey(m => m.SenderId)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<ConsultationMessage>().HasIndex(m => new { m.AppointmentId, m.CreatedAt });
+
+            modelBuilder.Entity<SearchHistory>()
+                .HasOne(h => h.User)
+                .WithMany()
+                .HasForeignKey(h => h.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<SearchHistory>()
+                .HasOne(h => h.Specialization)
+                .WithMany()
+                .HasForeignKey(h => h.SpecializationId)
+                .OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<SearchHistory>().HasIndex(h => new { h.UserId, h.CreatedAt });
 
             modelBuilder.Entity<PasswordResetCode>()
                 .HasOne(p => p.User)

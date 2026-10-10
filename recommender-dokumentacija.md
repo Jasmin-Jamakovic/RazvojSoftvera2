@@ -35,9 +35,13 @@ Glavna content-based komponenta.
    - naziva njegovih **specijalizacija**,
    - ključnih riječi iz **biografije** (`Bio`),
    - **grada** klinike.
-2. **Profil pacijenta** (`BuildPatientTextAsync`) se gradi iz **stvarne historije** pacijenta:
+2. **Profil pacijenta** (`BuildPatientProfileAsync`) se gradi iz **stvarne historije** pacijenta:
    - specijalizacija i biografija ljekara kod kojih je pacijent **ranije imao termine**,
-   - **dijagnoza, terapija i napomene** iz njegovog elektronskog kartona (`MedicalRecordEntry`).
+   - **ocjene koje je pacijent dao**: ljekar kojeg je ocijenio sa 4 ili 5 ulazi u profil **dvostruko**
+     (jači signal interesa), a ljekar ocijenjen sa 1 ili 2 se **izostavlja** iz profila,
+   - **dijagnoza, terapija i napomene** iz njegovog elektronskog kartona (`MedicalRecordEntry`),
+   - **historija pretraga** (`SearchHistory`): tekst koji je pacijent ukucao u pretragu ljekara i
+     specijalizacija koju je odabrao kao filter (posljednjih 20 pretraga).
 3. **Tokenizacija** (`Tokenize`): tekst se prebacuje u mala slova, izvlače se riječi dužine ≥ 3
    (podržana su naša slova č/ć/ž/š/đ), a uklanjaju se **stop-riječi** (dvojezična BS/EN lista).
 4. **TF-IDF** (`TfIdf`): za svaki token računa se `tf · idf`, gdje je
@@ -53,7 +57,7 @@ Računaju se samo recenzije koje nisu obrisane (`!IsDeleted`).
 
 `distDecay(d) = exp(-udaljenost_km / 25)`, gdje se udaljenost računa **Haversine** formulom između
 koordinata pacijenta i koordinata klinike ljekara. Ako koordinate nisu poznate, vrijednost je `1.0`
-(blizina ne kažnjava pacijenta bez lokacije).
+(blizina ne kažnjava pacijenta bez lokacije), ali se blizina tada ne koristi kao objašnjenje preporuke.
 
 ### 2.4. availability(d) – dostupnost (težina 0.10)
 
@@ -67,9 +71,11 @@ doprinose** sve četiri komponente i bira poruku one komponente koja je najviše
 
 | Dominantna komponenta | Poruka korisniku |
 |---|---|
-| sličnost (historija) | „Preporučeno na osnovu vaših prethodnih posjeta i historije" |
+| sličnost – specijalizacija iz nedavnih pretraga | „Odgovara vašim nedavnim pretragama (Specijalizacija)" |
+| sličnost – specijalizacija ranijih posjeta | „Preporučeno na osnovu vaših prethodnih posjeta (Specijalizacija)" |
+| sličnost – ostalo (karton, tekst pretraga) | „Preporučeno na osnovu vaše historije pregleda i pretraga" |
 | ocjena | „Visoko ocijenjen ljekar (X.X/5)" |
-| blizina | „Ljekar u vašoj blizini" |
+| blizina (samo ako je lokacija pacijenta poznata) | „Ljekar u vašoj blizini" |
 | dostupnost | „Dostupan u narednih 7 dana" |
 
 Time je zadovoljen zahtjev da recommender **objašnjava** zašto se određeni sadržaj preporučuje.
@@ -84,8 +90,11 @@ preporuke je prikazan na svakoj kartici ljekara:
 Svi signali koji ulaze u scoring se **stvarno upisuju kroz aplikaciju** i **stvarno koriste**:
 
 - **Historija termina** – upisuje se pri svakom zakazivanju (`InitialAppointmentState`).
-- **Recenzije/ocjene** – pacijent ih ostavlja nakon završenog pregleda (`ReviewService`); koriste se i u
-  scoring-u i u objašnjenju.
+- **Historija pretraga** – svaka pretraga ljekara koju pacijent napravi (tekst i/ili specijalizacija) upisuje
+  se u tabelu `SearchHistories` (`DoctorService.RecordSearchAsync`); uzastopno ponavljanje iste pretrage se
+  ne upisuje dvaput.
+- **Recenzije/ocjene** – pacijent ih ostavlja nakon završenog pregleda (`ReviewService`); prosječna ocjena
+  ljekara ulazi u `rating` komponentu, a ocjene koje je pacijent dao oblikuju njegov profil (`sim`).
 - **Stavke kartona** (dijagnoza/terapija/napomene) – upisuje ljekar.
 - **Lokacija i termini** – koordinate pacijenta/klinike i generisani slobodni termini.
 
@@ -97,8 +106,12 @@ ulaze u konačni `score`.
 - Model je **in-process**: TF-IDF/IDF se računa nad trenutnim korpusom ljekara pri svakom računanju,
   pa nema zastarjelog perzistiranog modela koji treba zasebno održavati.
 - Konačna rangirana lista se **kešira u Redis-u** pod ključem `recs:{patientId}` sa TTL od **6 sati**.
-- Keš se **invalidira** (`InvalidateAsync`) kada se pojavi novi relevantan događaj (nova recenzija / novi
-  termin), tako da naredno računanje odražava nove podatke.
+- Keš se **invalidira** (`InvalidateAsync`) kada se pojavi novi relevantan događaj, tako da naredno
+  računanje odražava nove podatke:
+  - zakazan novi termin (`InitialAppointmentState`),
+  - završen pregled (`ConfirmedAppointmentState.CompleteAsync`),
+  - nova recenzija (`ReviewService`),
+  - nova pretraga (`DoctorService.RecordSearchAsync`).
 
 ## 6. Cold-start (pacijent bez historije)
 

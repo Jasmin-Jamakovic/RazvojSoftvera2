@@ -15,7 +15,9 @@ namespace eDoktor.Services.Recommender
     // Content-based recommender per the spec:
     //   score(d) = 0.50 * sim(p,d) + 0.25 * norm(rating(d)) + 0.15 * distDecay(d) + 0.10 * availability(d)
     // TF-IDF over the doctor corpus, cosine similarity between patient vector and each doctor vector.
-    // Result cached in Redis under "recs:{patientId}" with 6h TTL; invalidated on new appointment / review.
+    // The patient vector comes from visit history, the ratings the patient gave and their searches.
+    // Result cached in Redis under "recs:{patientId}" with 6h TTL; invalidated on booking, completed visit,
+    // new review and new search.
     public class RecommenderService : IRecommenderService
     {
         private const double W_SIM = 0.50;
@@ -72,8 +74,8 @@ namespace eDoktor.Services.Recommender
             var doctorVecs = doctorTokens.ToDictionary(kv => kv.Key, kv => TfIdf(kv.Value, idf));
 
             // Patient profile text from history
-            var patientText = await BuildPatientTextAsync(patientId);
-            var patientTokens = Tokenize(patientText);
+            var profile = await BuildPatientProfileAsync(patientId);
+            var patientTokens = Tokenize(profile.Text);
             var patientVec = patientTokens.Count == 0 ? new Dictionary<string, double>() : TfIdf(patientTokens, idf);
 
             // Compute weighted scores
@@ -81,19 +83,20 @@ namespace eDoktor.Services.Recommender
             var scored = doctors.Select(d =>
             {
                 var sim = patientVec.Count == 0 ? 0.0 : Cosine(patientVec, doctorVecs[d.Id]);
-                var avgRating = d.Reviews?.Any() == true ? d.Reviews.Where(r => !r.IsDeleted).Average(r => (double)r.Rating) : 0;
+                var avgRating = AverageRating(d);
                 var normRating = avgRating / 5.0;
-                var dist = (patient?.Latitude, patient?.Longitude, d.Clinic?.Latitude, d.Clinic?.Longitude) switch
+                double? dist = (patient?.Latitude, patient?.Longitude, d.Clinic?.Latitude, d.Clinic?.Longitude) switch
                 {
                     (double pLat, double pLon, double cLat, double cLon) => HaversineKm(pLat, pLon, cLat, cLon),
-                    _ => 0.0
+                    _ => null
                 };
-                var distDecay = Math.Exp(-dist / 25.0);
+                // Unknown location: no distance penalty (decay 1.0), but proximity is not used as the explanation.
+                var distDecay = dist.HasValue ? Math.Exp(-dist.Value / 25.0) : 1.0;
                 var availability = d.TimeSlots?.Any(t => !t.IsBooked && t.StartUtc > DateTime.UtcNow && t.StartUtc <= threshold) == true ? 1.0 : 0.0;
 
                 var score = W_SIM * sim + W_RATING * normRating + W_DIST * distDecay + W_AVAIL * availability;
 
-                var reason = DominantReason(sim, normRating, distDecay, availability, d);
+                var reason = DominantReason(sim, normRating, dist.HasValue ? distDecay : 0, availability, d, profile);
                 var resp = DoctorService.Map(d);
                 resp.RecommendationReason = reason;
                 return (Score: score, Resp: resp);
@@ -106,25 +109,73 @@ namespace eDoktor.Services.Recommender
             return scored.Take(n).ToList();
         }
 
-        private async Task<string> BuildPatientTextAsync(int patientId)
+        private const int SearchHistoryDepth = 20;
+        private const int LikedRating = 4;
+        private const int DislikedRating = 2;
+
+        private record PatientProfile(string Text, HashSet<string> SearchedSpecializations, HashSet<string> VisitedSpecializations);
+
+        // Builds the patient's profile from real, recorded data:
+        //  - doctors of past appointments (specializations + bio); a doctor the patient rated >= 4 counts twice,
+        //    one rated <= 2 is left out, so the ratings the patient gave steer the profile;
+        //  - diagnosis/therapy/notes from the medical record;
+        //  - the latest searches (typed text + chosen specialization).
+        private async Task<PatientProfile> BuildPatientProfileAsync(int patientId)
         {
             var pieces = new List<string>();
-            var apptDocs = await _db.Appointments
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var visits = await _db.Appointments
                 .Where(a => a.PatientId == patientId)
-                .Include(a => a.Doctor).ThenInclude(d => d.DoctorSpecializations).ThenInclude(ds => ds.Specialization)
-                .Select(a => a.Doctor)
+                .Select(a => new
+                {
+                    a.DoctorId,
+                    a.Doctor.Bio,
+                    Specializations = a.Doctor.DoctorSpecializations.Select(ds => ds.Specialization.Name).ToList(),
+                    Rating = a.Review != null && !a.Review.IsDeleted ? (int?)a.Review.Rating : null
+                })
                 .ToListAsync();
-            foreach (var d in apptDocs.Distinct())
+            foreach (var g in visits.GroupBy(v => v.DoctorId))
             {
-                pieces.Add(d.Bio ?? string.Empty);
-                pieces.AddRange(d.DoctorSpecializations.Select(ds => ds.Specialization?.Name ?? string.Empty));
+                var ratings = g.Where(v => v.Rating.HasValue).Select(v => v.Rating!.Value).ToList();
+                var avg = ratings.Count == 0 ? (double?)null : ratings.Average();
+                if (avg <= DislikedRating) continue;
+                var weight = avg >= LikedRating ? 2 : 1;
+                var doctor = g.First();
+                for (var i = 0; i < weight; i++)
+                {
+                    pieces.Add(doctor.Bio ?? string.Empty);
+                    pieces.AddRange(doctor.Specializations);
+                }
+                foreach (var spec in doctor.Specializations) visited.Add(spec);
             }
+
             var entries = await _db.MedicalRecordEntries
                 .Where(e => e.MedicalRecord.PatientId == patientId)
                 .Select(e => (e.Diagnosis ?? "") + " " + (e.Therapy ?? "") + " " + (e.Notes ?? ""))
                 .ToListAsync();
             pieces.AddRange(entries);
-            return string.Join(" ", pieces);
+
+            var searches = await _db.SearchHistories
+                .Where(h => h.UserId == patientId)
+                .OrderByDescending(h => h.CreatedAt)
+                .Take(SearchHistoryDepth)
+                .Select(h => new { h.Query, Specialization = h.Specialization != null ? h.Specialization.Name : null })
+                .ToListAsync();
+            var searched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var h in searches)
+            {
+                if (h.Query != null) pieces.Add(h.Query);
+                if (h.Specialization != null) { pieces.Add(h.Specialization); searched.Add(h.Specialization); }
+            }
+
+            return new PatientProfile(string.Join(" ", pieces), searched, visited);
+        }
+
+        private static double AverageRating(Doctor d)
+        {
+            var active = d.Reviews?.Where(r => !r.IsDeleted).ToList();
+            return active == null || active.Count == 0 ? 0 : active.Average(r => (double)r.Rating);
         }
 
         private static string BuildDoctorText(Doctor d)
@@ -187,12 +238,19 @@ namespace eDoktor.Services.Recommender
             return R * c;
         }
 
-        private static string DominantReason(double sim, double rating, double dist, double avail, Doctor d)
+        private static string DominantReason(double sim, double rating, double dist, double avail, Doctor d, PatientProfile profile)
         {
+            var specs = d.DoctorSpecializations.Select(ds => ds.Specialization?.Name).OfType<string>().ToList();
+            var searchedSpec = specs.FirstOrDefault(profile.SearchedSpecializations.Contains);
+            var visitedSpec = specs.FirstOrDefault(profile.VisitedSpecializations.Contains);
+            var similarity = searchedSpec != null ? $"Odgovara vašim nedavnim pretragama ({searchedSpec})"
+                : visitedSpec != null ? $"Preporučeno na osnovu vaših prethodnih posjeta ({visitedSpec})"
+                : "Preporučeno na osnovu vaše historije pregleda i pretraga";
+
             var contribs = new[]
             {
-                (W_SIM * sim, "Preporučeno na osnovu vaših prethodnih posjeta i historije"),
-                (W_RATING * rating, $"Visoko ocijenjen ljekar ({(d.Reviews?.Any() == true ? d.Reviews.Average(r => r.Rating) : 0):F1}/5)"),
+                (W_SIM * sim, similarity),
+                (W_RATING * rating, $"Visoko ocijenjen ljekar ({AverageRating(d):F1}/5)"),
                 (W_DIST * dist, "Ljekar u vašoj blizini"),
                 (W_AVAIL * avail, "Dostupan u narednih 7 dana")
             };

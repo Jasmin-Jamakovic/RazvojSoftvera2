@@ -3,9 +3,11 @@
     package="com.example.edoktor_mobile">
     
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Video consultations: camera + microphone for the call, photos of findings for the chat. -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" />
-    <uses-feature android:name="android.hardware.camera.autofocus" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     
     <application
         android:label="eDoktor Mobile"

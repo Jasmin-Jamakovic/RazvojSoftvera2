@@ -11,6 +11,7 @@ using eDoktor.Services.Auth;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
 using eDoktor.Services.RabbitMQ;
+using eDoktor.Services.Recommender;
 using Microsoft.EntityFrameworkCore;
 
 namespace eDoktor.Services.Doctors
@@ -20,10 +21,13 @@ namespace eDoktor.Services.Doctors
         private readonly eDoktorDbContext _db;
         private readonly IPasswordHasher _hasher;
         private readonly IRabbitMQService _rabbit;
+        private readonly ICurrentUserService _current;
+        private readonly IRecommenderService _recommender;
 
-        public DoctorService(eDoktorDbContext db, IPasswordHasher hasher, IRabbitMQService rabbit)
+        public DoctorService(eDoktorDbContext db, IPasswordHasher hasher, IRabbitMQService rabbit,
+            ICurrentUserService current, IRecommenderService recommender)
         {
-            _db = db; _hasher = hasher; _rabbit = rabbit;
+            _db = db; _hasher = hasher; _rabbit = rabbit; _current = current; _recommender = recommender;
         }
 
         public async Task<PagedResult<DoctorResponse>> GetAsync(DoctorSearchObject s)
@@ -57,6 +61,7 @@ namespace eDoktor.Services.Doctors
             }
 
             s.Normalize();
+            if (s.Page == 0) await RecordSearchAsync(s);
             int? total = s.IncludeTotalCount ? await q.CountAsync() : null;
             var list = await q
                 .OrderBy(d => d.User.LastName).ThenBy(d => d.User.FirstName)
@@ -64,6 +69,25 @@ namespace eDoktor.Services.Doctors
                 .ToListAsync();
 
             return new PagedResult<DoctorResponse> { Items = list.Select(d => Map(d)).ToList(), TotalCount = total };
+        }
+
+        // Patients' searches (name text / specialization) are stored as a recommender signal.
+        private async Task RecordSearchAsync(DoctorSearchObject s)
+        {
+            var query = string.IsNullOrWhiteSpace(s.Name) ? null : s.Name.Trim();
+            if (query?.Length > 100) query = query[..100];
+            if (query == null && s.SpecializationId == null) return;
+            if (await _current.GetUserRoleAsync() != Roles.Patient) return;
+            var userId = await _current.GetUserIdAsync();
+            if (userId == null) return;
+
+            // Skip an exact repeat of the patient's previous search.
+            var last = await _db.SearchHistories.Where(h => h.UserId == userId).OrderByDescending(h => h.Id).FirstOrDefaultAsync();
+            if (last != null && last.Query == query && last.SpecializationId == s.SpecializationId) return;
+
+            _db.SearchHistories.Add(new SearchHistory { UserId = userId.Value, Query = query, SpecializationId = s.SpecializationId });
+            await _db.SaveChangesAsync();
+            await _recommender.InvalidateAsync(userId.Value);
         }
 
         public async Task<DoctorResponse?> GetByIdAsync(int id)

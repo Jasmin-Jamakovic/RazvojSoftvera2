@@ -7,7 +7,7 @@ using eDoktor.Model.SearchObjects;
 using eDoktor.Services.AppointmentStateMachine;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
-using eDoktor.Services.Redis;
+using eDoktor.Services.Recommender;
 using Microsoft.EntityFrameworkCore;
 
 namespace eDoktor.Services.Reviews
@@ -15,8 +15,8 @@ namespace eDoktor.Services.Reviews
     public class ReviewService : IReviewService
     {
         private readonly eDoktorDbContext _db;
-        private readonly IRedisCacheService _cache;
-        public ReviewService(eDoktorDbContext db, IRedisCacheService cache) { _db = db; _cache = cache; }
+        private readonly IRecommenderService _recommender;
+        public ReviewService(eDoktorDbContext db, IRecommenderService recommender) { _db = db; _recommender = recommender; }
 
         public async Task<PagedResult<ReviewResponse>> GetAsync(ReviewSearchObject s)
         {
@@ -64,7 +64,7 @@ namespace eDoktor.Services.Reviews
             r.IsDeleted = false;
             await _db.SaveChangesAsync();
 
-            await _cache.RemoveAsync($"recs:{patientId}");
+            await _recommender.InvalidateAsync(patientId);
 
             return new ReviewResponse
             {

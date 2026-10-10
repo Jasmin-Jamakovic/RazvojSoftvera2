@@ -6,6 +6,7 @@ using eDoktor.Model.Responses;
 using eDoktor.Services.Database;
 using eDoktor.Services.PayPal;
 using eDoktor.Services.RabbitMQ;
+using eDoktor.Services.Recommender;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +25,7 @@ namespace eDoktor.Services.AppointmentStateMachine
                 throw new UserException("Appointment cannot be completed before its scheduled time");
             a.StateMachine = nameof(CompletedAppointmentState);
             await _context.SaveChangesAsync();
+            await _serviceProvider.GetRequiredService<IRecommenderService>().InvalidateAsync(a.PatientId);
             await NotifyAsync(a.PatientId, "Termin završen",
                 $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} je označen kao završen. Možete ostaviti recenziju.");
             return Map(a);

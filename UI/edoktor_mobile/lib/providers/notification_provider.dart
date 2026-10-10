@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../models/consultation_message.dart';
 import '../models/notification_item.dart';
 import '../services/api_client.dart';
 import '../services/auth_store.dart';
@@ -10,6 +12,10 @@ class NotificationProvider extends ChangeNotifier {
   List<NotificationItem> get items => _items;
   int get unreadCount => _items.where((n) => !n.isRead).length;
   HubConnection? _hub;
+  final _consultation = StreamController<ConsultationMessage>.broadcast();
+
+  /// Chat messages of online consultations, pushed in real time over the same SignalR connection.
+  Stream<ConsultationMessage> get consultationMessages => _consultation.stream;
 
   Future<void> load() async {
     final res = await ApiClient.get('/api/notifications', query: {'pageSize': 100});
@@ -35,6 +41,11 @@ class NotificationProvider extends ChangeNotifier {
     _hub!.on('notification:new', (args) {
       if (args != null && args.isNotEmpty) {
         load();
+      }
+    });
+    _hub!.on('consultation:message', (args) {
+      if (args != null && args.isNotEmpty && args.first is Map) {
+        _consultation.add(ConsultationMessage.fromJson(Map<String, dynamic>.from(args.first as Map)));
       }
     });
     try { await _hub!.start(); } catch (_) {}

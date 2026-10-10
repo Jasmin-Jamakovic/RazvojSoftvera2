@@ -7,6 +7,7 @@ using eDoktor.Model.Responses;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
 using eDoktor.Services.RabbitMQ;
+using eDoktor.Services.Recommender;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -59,6 +60,9 @@ namespace eDoktor.Services.AppointmentStateMachine
                 StartUtc = slot.StartUtc,
                 Type = appt.Type.ToString()
             });
+
+            // A new booking changes the patient's history, so their cached recommendations are stale.
+            await _serviceProvider.GetRequiredService<IRecommenderService>().InvalidateAsync(appt.PatientId);
 
             await NotifyAsync(appt.PatientId, "Termin zakazan",
                 $"Vaš termin kod dr. {doctorUser?.FirstName} {doctorUser?.LastName} ({slot.StartUtc:dd.MM.yyyy. HH:mm}) je zakazan i čeka potvrdu.");
