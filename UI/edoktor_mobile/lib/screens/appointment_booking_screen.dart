@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:table_calendar/table_calendar.dart';
 import '../models/doctor.dart';
 import '../models/time_slot.dart';
 import '../providers/appointment_provider.dart';
@@ -17,40 +18,138 @@ class AppointmentBookingScreen extends StatefulWidget {
 }
 
 class _AppointmentBookingScreenState extends State<AppointmentBookingScreen> {
+  static const _free = AppColors.primaryLight;
+  static const _busy = Color(0xFFB8BEC8);
+  static const _selected = Color(0xFF1E63D6);
+
+  late final DateTime _today;
+  late final DateTime _lastDay;
+  late DateTime _focusedMonth;
   DateTime? _selectedDay;
   TimeSlot? _slot;
-  List<TimeSlot> _slots = [];
   int _type = 0;
   bool _loading = false;
-
-  late final List<DateTime> _days;
   bool _booking = false;
+  String? _error;
+
+  // Free future slots of the shown month, grouped by local calendar day.
+  Map<DateTime, List<TimeSlot>> _freeByDay = {};
+
+  List<TimeSlot> get _slots => _selectedDay == null ? const [] : (_freeByDay[_selectedDay] ?? const []);
 
   @override
   void initState() {
     super.initState();
-    final today = DateTime.now();
-    _days = List.generate(21, (i) => DateTime(today.year, today.month, today.day + i));
-    _selectedDay = _days.first;
-    _loadSlots();
+    _today = DateUtils.dateOnly(DateTime.now());
+    _lastDay = _today.add(const Duration(days: 90));
+    _focusedMonth = _today;
+    _loadMonth(selectFirstFree: true);
   }
 
-  void _pickDay(DateTime d) {
-    if (_selectedDay == d) return;
-    setState(() => _selectedDay = d);
-    _loadSlots();
+  Future<void> _loadMonth({bool selectFirstFree = false}) async {
+    final month = DateTime(_focusedMonth.year, _focusedMonth.month);
+    final from = month.isBefore(_today) ? _today : month;
+    final to = DateTime(month.year, month.month + 1);
+    setState(() { _loading = true; _error = null; });
+    try {
+      final now = DateTime.now();
+      final slots = await context.read<TimeSlotProvider>().freeInRange(widget.doctor.id, from, to);
+      // Ignore the response if the user already moved to another month.
+      if (!mounted || month != DateTime(_focusedMonth.year, _focusedMonth.month)) return;
+      final grouped = <DateTime, List<TimeSlot>>{};
+      for (final t in slots.where((t) => t.startUtc.isAfter(now))) {
+        grouped.putIfAbsent(DateUtils.dateOnly(t.startUtc), () => []).add(t);
+      }
+      for (final list in grouped.values) {
+        list.sort((a, b) => a.startUtc.compareTo(b.startUtc));
+      }
+      setState(() {
+        _freeByDay = grouped;
+        if (selectFirstFree && grouped.isNotEmpty) {
+          _selectedDay = (grouped.keys.toList()..sort()).first;
+        }
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
-  Future<void> _loadSlots() async {
-    setState(() => _loading = true);
-    final day = _selectedDay ?? DateTime.now();
-    final from = DateTime(day.year, day.month, day.day);
-    final to = from.add(const Duration(days: 1));
-    final s = await context.read<TimeSlotProvider>().forDoctor(widget.doctor.id, from: from.toUtc(), to: to.toUtc());
-    // Ignore the response if the user already picked another day.
-    if (!mounted || _selectedDay != day) return;
-    setState(() { _slots = s; _slot = null; _loading = false; });
+  void _pickDay(DateTime day, DateTime focused) {
+    setState(() { _selectedDay = DateUtils.dateOnly(day); _slot = null; _focusedMonth = focused; });
   }
+
+  void _changeMonth(DateTime focused) {
+    _focusedMonth = focused;
+    _selectedDay = null;
+    _slot = null;
+    _loadMonth(selectFirstFree: true);
+  }
+
+  Widget _dayCell(DateTime day, {required Color? bg, required Color fg, bool bold = false, Border? border}) => Center(
+        child: Container(
+          width: 38,
+          height: 38,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: bg, shape: BoxShape.circle, border: border),
+          child: Text('${day.day}', style: TextStyle(color: fg, fontWeight: bold ? FontWeight.bold : FontWeight.w500)),
+        ),
+      );
+
+  Widget _availabilityCell(DateTime day) {
+    final hasFree = _freeByDay.containsKey(DateUtils.dateOnly(day));
+    final isToday = DateUtils.isSameDay(day, _today);
+    return _dayCell(day,
+        bg: hasFree ? _free : _busy.withValues(alpha: 0.35),
+        fg: hasFree ? Colors.white : const Color(0xFF6B7385),
+        bold: hasFree,
+        border: isToday ? Border.all(color: AppColors.deep, width: 1.5) : null);
+  }
+
+  Widget _legend(Color color, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+      ]);
+
+  Widget _calendar() => AppCard(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+        child: Column(children: [
+          TableCalendar<void>(
+            firstDay: _today,
+            lastDay: _lastDay,
+            focusedDay: _focusedMonth.isBefore(_today) ? _today : _focusedMonth,
+            startingDayOfWeek: StartingDayOfWeek.monday,
+            availableCalendarFormats: const {CalendarFormat.month: 'Mjesec'},
+            rowHeight: 46,
+            headerStyle: const HeaderStyle(titleCentered: true, formatButtonVisible: false),
+            selectedDayPredicate: (d) => _selectedDay != null && DateUtils.isSameDay(d, _selectedDay),
+            onDaySelected: _pickDay,
+            onPageChanged: _changeMonth,
+            calendarBuilders: CalendarBuilders(
+              headerTitleBuilder: (c, d) => Center(
+                child: Text('${bsMonths[d.month - 1]} ${d.year}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+              dowBuilder: (c, d) => Center(
+                child: Text(bsDaysShort[d.weekday - 1], style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              ),
+              defaultBuilder: (c, d, f) => _availabilityCell(d),
+              todayBuilder: (c, d, f) => _availabilityCell(d),
+              selectedBuilder: (c, d, f) => _dayCell(d, bg: _selected, fg: Colors.white, bold: true),
+              disabledBuilder: (c, d, f) => _dayCell(d, bg: null, fg: const Color(0xFFC9CED6)),
+              outsideBuilder: (c, d, f) => const SizedBox.shrink(),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(spacing: 16, runSpacing: 6, alignment: WrapAlignment.center, children: [
+            _legend(_free, 'Slobodno'),
+            _legend(_busy, 'Zauzeto'),
+            _legend(_selected, 'Odabrano'),
+          ]),
+        ]),
+      );
 
   Future<void> _confirm() async {
     if (_slot == null) return;
@@ -76,7 +175,7 @@ class _AppointmentBookingScreenState extends State<AppointmentBookingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final day = _selectedDay ?? _days.first;
+    final day = _selectedDay ?? _today;
     final d = widget.doctor;
     final buttonLabel = _slot == null
         ? 'Odaberite vrijeme'
@@ -90,7 +189,7 @@ class _AppointmentBookingScreenState extends State<AppointmentBookingScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(12),
               child: Row(children: [
-                DoctorAvatar(d.fullName, size: 44),
+                DoctorPhoto(doctorId: d.id, name: d.fullName, hasPhoto: d.hasPhoto, size: 44),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -102,34 +201,30 @@ class _AppointmentBookingScreenState extends State<AppointmentBookingScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.primary)),
               ]),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 6),
-              child: Text('${bsMonths[day.month - 1]} ${day.year}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            ),
-            SizedBox(
-              height: 98,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                itemCount: _days.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (_, i) => _DayChip(day: _days[i], selected: _days[i] == day, onTap: () => _pickDay(_days[i])),
-              ),
-            ),
-            const GroupLabel('Slobodni termini'),
+            const SizedBox(height: 16),
+            _calendar(),
+            GroupLabel(_selectedDay == null ? 'Slobodni termini' : 'Slobodni termini · ${dayLabel(_selectedDay!)}'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: _loading
                   ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
-                  : _slots.isEmpty
-                      ? const EmptyState(icon: Icons.event_busy_outlined, message: 'Nema slobodnih termina za ovaj dan.\nProbajte drugi dan.')
-                      : LayoutBuilder(builder: (context, c) {
-                          final w = (c.maxWidth - 16) / 3;
-                          return Wrap(spacing: 8, runSpacing: 8, children: [
-                            for (final s in _slots)
-                              _SlotChip(width: w, label: hhmm(s.startUtc), selected: _slot?.id == s.id, onTap: () => setState(() => _slot = s)),
-                          ]);
-                        }),
+                  : _error != null
+                      ? EmptyState(icon: Icons.error_outline, message: 'Termine nije moguće učitati: $_error')
+                      : _selectedDay == null
+                          ? EmptyState(
+                              icon: Icons.event_busy_outlined,
+                              message: _freeByDay.isEmpty
+                                  ? 'Ljekar nema slobodnih termina u ovom mjesecu.\nPogledajte sljedeći mjesec.'
+                                  : 'Odaberite zeleni datum u kalendaru.')
+                          : _slots.isEmpty
+                              ? const EmptyState(icon: Icons.event_busy_outlined, message: 'Nema slobodnih termina za ovaj dan.\nOdaberite zeleni datum.')
+                              : LayoutBuilder(builder: (context, c) {
+                                  final w = (c.maxWidth - 16) / 3;
+                                  return Wrap(spacing: 8, runSpacing: 8, children: [
+                                    for (final t in _slots)
+                                      _SlotChip(width: w, label: hhmm(t.startUtc), selected: _slot?.id == t.id, onTap: () => setState(() => _slot = t)),
+                                  ]);
+                                }),
             ),
             const GroupLabel('Vrsta pregleda'),
             Padding(
@@ -152,41 +247,6 @@ class _AppointmentBookingScreenState extends State<AppointmentBookingScreen> {
           child: GradientButton(label: buttonLabel, busy: _booking, onPressed: _slot == null ? null : _confirm),
         ),
       ]),
-    );
-  }
-}
-
-class _DayChip extends StatelessWidget {
-  final DateTime day;
-  final bool selected;
-  final VoidCallback onTap;
-  const _DayChip({required this.day, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
-          curve: Curves.easeOut,
-          width: 56,
-          decoration: BoxDecoration(
-            color: selected ? null : Colors.white,
-            gradient: selected ? AppColors.gradient : null,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: selected ? AppColors.glowShadow : AppColors.softShadow,
-          ),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(bsDaysShort[day.weekday - 1],
-                style: TextStyle(fontSize: 11, color: selected ? Colors.white.withValues(alpha: 0.8) : AppColors.muted)),
-            const SizedBox(height: 2),
-            Text('${day.day}',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: selected ? Colors.white : AppColors.ink)),
-          ]),
-        ),
-      ),
     );
   }
 }

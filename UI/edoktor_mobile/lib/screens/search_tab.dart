@@ -6,6 +6,7 @@ import '../providers/doctor_provider.dart';
 import '../providers/specialization_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/doctor_card.dart';
+import '../widgets/doctor_filter_sheet.dart';
 import '../widgets/ui.dart';
 import 'doctor_details_screen.dart';
 
@@ -19,8 +20,10 @@ class _SearchTabState extends State<SearchTab> {
   final _q = TextEditingController();
   List<Specialization> _specs = [];
   int? _specId;
+  DoctorFilters _filters = const DoctorFilters();
   List<Doctor> _doctors = [];
   bool _loading = false;
+  String? _error;
 
   @override
   void initState() {
@@ -42,10 +45,26 @@ class _SearchTabState extends State<SearchTab> {
   }
 
   Future<void> _search() async {
-    setState(() => _loading = true);
-    final res = await context.read<DoctorProvider>().search(name: _q.text, specializationId: _specId);
-    if (!mounted) return;
-    setState(() { _doctors = res; _loading = false; });
+    setState(() { _loading = true; _error = null; });
+    try {
+      final f = _filters;
+      final res = await context.read<DoctorProvider>().search(
+        name: _q.text, specializationId: _specId,
+        cityId: f.cityId, maxPrice: f.maxPrice, minRating: f.minRating, availableSoon: f.availableSoon,
+      );
+      if (mounted) setState(() => _doctors = res);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openFilters() async {
+    final f = await DoctorFilterSheet.show(context, _filters);
+    if (f == null) return;
+    setState(() => _filters = f);
+    _search();
   }
 
   void _pickSpec(int? id) {
@@ -82,6 +101,27 @@ class _SearchTabState extends State<SearchTab> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          child: Row(children: [
+            Badge(
+              isLabelVisible: _filters.activeCount > 0,
+              label: Text('${_filters.activeCount}'),
+              child: OutlinedButton.icon(
+                onPressed: _openFilters,
+                icon: const Icon(Icons.tune, size: 18),
+                label: const Text('Filteri'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(_filters.activeCount == 0 ? 'Lokacija, cijena, ocjena, dostupnost' : _filters.summary,
+                  maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            ),
+            if (_filters.activeCount > 0)
+              TextButton(onPressed: () { setState(() => _filters = const DoctorFilters()); _search(); }, child: const Text('Poništi')),
+          ]),
+        ),
         SizedBox(
           height: 56,
           child: ListView(
@@ -99,8 +139,10 @@ class _SearchTabState extends State<SearchTab> {
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(child: EmptyState(icon: Icons.error_outline, message: 'Pretraga nije uspjela: $_error'))
               : _doctors.isEmpty
-                  ? const Center(child: EmptyState(icon: Icons.person_search_outlined, message: 'Nema rezultata za ovu pretragu.'))
+                  ? const Center(child: EmptyState(icon: Icons.person_search_outlined, message: 'Nema ljekara za odabranu pretragu i filtere.'))
                   : ListView.builder(
                       padding: const EdgeInsets.only(top: 4, bottom: 16),
                       itemCount: _doctors.length,

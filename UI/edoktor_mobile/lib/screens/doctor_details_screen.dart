@@ -33,7 +33,7 @@ class DoctorDetailsScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.25)),
-                  child: DoctorAvatar(doctor.fullName, size: 88),
+                  child: DoctorPhoto(doctorId: doctor.id, name: doctor.fullName, hasPhoto: doctor.hasPhoto, size: 88),
                 ),
                 const SizedBox(height: 12),
                 Text(doctor.fullName,

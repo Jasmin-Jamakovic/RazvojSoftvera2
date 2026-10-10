@@ -4,10 +4,14 @@ import '../models/review.dart';
 import '../services/api_client.dart';
 
 class DoctorProvider extends ChangeNotifier {
-  Future<List<Doctor>> search({String? name, int? specializationId}) async {
+  Future<List<Doctor>> search({String? name, int? specializationId, int? cityId, double? maxPrice, double? minRating, bool availableSoon = false}) async {
     final res = await ApiClient.get('/api/doctors', query: {
-      'name': name?.isEmpty == true ? null : name,
+      'name': name?.trim().isEmpty == true ? null : name?.trim(),
       'specializationId': specializationId,
+      'cityId': cityId,
+      'maxPrice': maxPrice,
+      'minRating': minRating,
+      'hasSlotInNext7Days': availableSoon ? true : null,
       'pageSize': 50,
     });
     final items = (res['items'] as List? ?? []).map((e) => Doctor.fromJson(e)).toList();

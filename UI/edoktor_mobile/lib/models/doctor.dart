@@ -13,6 +13,7 @@ class Doctor {
   final double averageRating;
   final int reviewCount;
   final String? recommendationReason;
+  final bool hasPhoto;
 
   Doctor({
     required this.id,
@@ -26,6 +27,7 @@ class Doctor {
     required this.averageRating,
     required this.reviewCount,
     this.recommendationReason,
+    this.hasPhoto = false,
   });
 
   String get fullName => 'Dr. $firstName $lastName'.trim();
@@ -42,5 +44,6 @@ class Doctor {
         averageRating: (j['averageRating'] ?? 0).toDouble(),
         reviewCount: j['reviewCount'] ?? 0,
         recommendationReason: j['recommendationReason'],
+        hasPhoto: j['hasPhoto'] ?? false,
       );
 }

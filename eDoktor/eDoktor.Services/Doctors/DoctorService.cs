@@ -33,7 +33,6 @@ namespace eDoktor.Services.Doctors
                 .Include(d => d.Clinic).ThenInclude(c => c.City)
                 .Include(d => d.DoctorSpecializations).ThenInclude(ds => ds.Specialization)
                 .Include(d => d.Reviews)
-                .Include(d => d.TimeSlots)
                 .Where(d => !d.IsDeleted)
                 .AsQueryable();
 
@@ -43,27 +42,28 @@ namespace eDoktor.Services.Doctors
                 q = q.Where(d => d.DoctorSpecializations.Any(ds => ds.SpecializationId == s.SpecializationId.Value));
             if (s.ClinicId.HasValue)
                 q = q.Where(d => d.ClinicId == s.ClinicId.Value);
+            if (s.CityId.HasValue)
+                q = q.Where(d => d.Clinic != null && d.Clinic.CityId == s.CityId.Value);
             if (s.MaxPrice.HasValue)
                 q = q.Where(d => d.ConsultationPrice <= s.MaxPrice.Value);
+            // Rating and availability are filtered in the database, before paging, so pages and TotalCount stay correct.
+            if (s.MinRating.HasValue)
+                q = q.Where(d => d.Reviews.Where(r => !r.IsDeleted).Select(r => (double?)r.Rating).Average() >= s.MinRating.Value);
+            if (s.HasSlotInNext7Days == true)
+            {
+                var now = DateTime.UtcNow;
+                var threshold = now.AddDays(7);
+                q = q.Where(d => _db.TimeSlots.Any(t => t.DoctorId == d.Id && !t.IsBooked && t.StartUtc > now && t.StartUtc <= threshold));
+            }
 
             s.Normalize();
             int? total = s.IncludeTotalCount ? await q.CountAsync() : null;
-            q = q.Skip(s.Page!.Value * s.PageSize!.Value).Take(s.PageSize!.Value);
-            var list = await q.ToListAsync();
+            var list = await q
+                .OrderBy(d => d.User.LastName).ThenBy(d => d.User.FirstName)
+                .Skip(s.Page!.Value * s.PageSize!.Value).Take(s.PageSize!.Value)
+                .ToListAsync();
 
-            // Post-filter for things hard to do in EF
-            var items = list.Select(d => Map(d)).ToList();
-            if (s.MinRating.HasValue) items = items.Where(x => x.AverageRating >= s.MinRating.Value).ToList();
-            if (s.HasSlotInNext7Days == true)
-            {
-                var threshold = DateTime.UtcNow.AddDays(7);
-                var doctorIdsWithSlots = list
-                    .Where(d => d.TimeSlots.Any(t => !t.IsBooked && t.StartUtc > DateTime.UtcNow && t.StartUtc <= threshold))
-                    .Select(d => d.Id).ToHashSet();
-                items = items.Where(x => doctorIdsWithSlots.Contains(x.Id)).ToList();
-            }
-
-            return new PagedResult<DoctorResponse> { Items = items, TotalCount = total };
+            return new PagedResult<DoctorResponse> { Items = list.Select(d => Map(d)).ToList(), TotalCount = total };
         }
 
         public async Task<DoctorResponse?> GetByIdAsync(int id)

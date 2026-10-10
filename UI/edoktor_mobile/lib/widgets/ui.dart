@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../services/auth_store.dart';
+import '../utils/api_config.dart';
 import '../theme/app_theme.dart';
 
 const bsDaysShort = ['Pon', 'Uto', 'Sri', 'Čet', 'Pet', 'Sub', 'Ned'];
@@ -197,6 +199,32 @@ class StatusPill extends StatelessWidget {
     };
     if (onGradient) return Pill(label(status, isPaid: isPaid), fg: Colors.white, bg: const Color(0x2EFFFFFF));
     return Pill(label(status, isPaid: isPaid), fg: fg, bg: bg);
+  }
+}
+
+/// Doctor's profile photo loaded from the photo endpoint, falling back to initials.
+class DoctorPhoto extends StatelessWidget {
+  final int doctorId;
+  final String name;
+  final bool hasPhoto;
+  final double size;
+  final bool circle;
+
+  const DoctorPhoto({super.key, required this.doctorId, required this.name, required this.hasPhoto, this.size = 46, this.circle = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = DoctorAvatar(name, size: size, circle: circle);
+    if (!hasPhoto) return fallback;
+    final image = Image.network(
+      '${ApiConfig.baseUrl}/api/doctors/$doctorId/photo',
+      headers: {if (AuthStore.token != null) 'Authorization': 'Bearer ${AuthStore.token}'},
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => fallback,
+    );
+    return circle ? ClipOval(child: image) : ClipRRect(borderRadius: BorderRadius.circular(size * 0.3), child: image);
   }
 }
 
