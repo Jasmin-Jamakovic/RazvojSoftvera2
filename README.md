@@ -9,6 +9,7 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 ## Table of Contents
 - [Project Overview](#project-overview)
 - [Tech Stack](#tech-stack)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Getting Started](#getting-started)
 - [Credentials](#credentials)
@@ -35,6 +36,36 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 - **Recommender**: in-process TF-IDF + cosine similarity, weighted by rating / distance / availability (see [below](#doctor-recommendation-system))
 - **Desktop app**: Flutter (Windows / macOS / Linux)
 - **Mobile app**: Flutter (Android primarily)
+
+## Screenshots
+
+### Mobile app (patient)
+<table>
+  <tr>
+    <td align="center"><img src="UI/screenshots/mobile/01-login.png" width="200"><br>Prijava</td>
+    <td align="center"><img src="UI/screenshots/mobile/02-home.png" width="200"><br>Početna i preporuke</td>
+    <td align="center"><img src="UI/screenshots/mobile/03-search.png" width="200"><br>Pretraga ljekara</td>
+    <td align="center"><img src="UI/screenshots/mobile/04-doctor-details.png" width="200"><br>Profil ljekara</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="UI/screenshots/mobile/05-booking.png" width="200"><br>Zakazivanje termina</td>
+    <td align="center"><img src="UI/screenshots/mobile/06-appointments.png" width="200"><br>Moji termini</td>
+    <td align="center"><img src="UI/screenshots/mobile/07-medical-record.png" width="200"><br>Zdravstveni karton</td>
+    <td align="center"><img src="UI/screenshots/mobile/08-profile.png" width="200"><br>Profil</td>
+  </tr>
+</table>
+
+### Desktop app (administrator)
+<table>
+  <tr>
+    <td align="center"><img src="UI/screenshots/desktop/01-dashboard.png" width="420"><br>Dashboard</td>
+    <td align="center"><img src="UI/screenshots/desktop/02-doctors.png" width="420"><br>Ljekari</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="UI/screenshots/desktop/03-appointments.png" width="420"><br>Termini</td>
+    <td align="center"><img src="UI/screenshots/desktop/04-reports.png" width="420"><br>Izvještaji</td>
+  </tr>
+</table>
 
 ## Project Structure
 

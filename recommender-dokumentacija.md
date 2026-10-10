@@ -74,6 +74,11 @@ doprinose** sve četiri komponente i bira poruku one komponente koja je najviše
 
 Time je zadovoljen zahtjev da recommender **objašnjava** zašto se određeni sadržaj preporučuje.
 
+U mobilnoj aplikaciji preporuke se prikazuju na početnom ekranu u sekciji „Preporučeno za vas“, a razlog
+preporuke je prikazan na svakoj kartici ljekara:
+
+<img src="UI/screenshots/mobile/02-home.png" width="260" alt="Preporuke na početnom ekranu mobilne aplikacije">
+
 ## 4. Stvarni podaci (nema lažnih signala)
 
 Svi signali koji ulaze u scoring se **stvarno upisuju kroz aplikaciju** i **stvarno koriste**:
