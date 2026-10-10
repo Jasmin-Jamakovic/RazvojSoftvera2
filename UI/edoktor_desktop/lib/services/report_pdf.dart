@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,6 +8,16 @@ import '../utils/labels.dart';
 
 /// Builds the two downloadable/printable PDF reports for the admin app.
 class ReportPdf {
+  static pw.ThemeData? _theme;
+
+  /// Loads the embedded Roboto font once at startup; the built-in PDF fonts lack č, ć and đ.
+  static Future<void> loadFonts() async {
+    _theme = pw.ThemeData.withFont(
+      base: pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Regular.ttf')),
+      bold: pw.Font.ttf(await rootBundle.load('assets/fonts/Roboto-Bold.ttf')),
+    );
+  }
+
   static final _money = NumberFormat.currency(symbol: 'EUR ', decimalDigits: 2);
   static final _date = DateFormat('dd.MM.yyyy. HH:mm');
 
@@ -35,7 +46,7 @@ class ReportPdf {
 
   /// Report 1 — doctor performance for a period: exams, ratings and revenue per doctor, with summary KPIs.
   static pw.Document doctorPerformance(DoctorReport r, {required String filterDescription}) {
-    final doc = pw.Document();
+    final doc = pw.Document(theme: _theme);
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(28),
@@ -77,7 +88,7 @@ class ReportPdf {
   /// Report 2 — appointments list over the current data set, with status filter info
   /// and a per-status summary.
   static pw.Document appointments(List<Appointment> items, {required String filterDescription}) {
-    final doc = pw.Document();
+    final doc = pw.Document(theme: _theme);
     final byStatus = <String, int>{};
     var totalRevenue = 0.0;
     for (final a in items) {
@@ -124,7 +135,7 @@ class ReportPdf {
 
   /// Report 3 — financial report: PayPal transactions in the selected period with totals.
   static pw.Document payments(List<Payment> items, PaymentSummary summary, {required String filterDescription}) {
-    final doc = pw.Document();
+    final doc = pw.Document(theme: _theme);
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(28),

@@ -73,6 +73,8 @@ services:
       - PayPal__ClientSecret=${PayPal__ClientSecret}
       - PayPal__BaseUrl=${PayPal__BaseUrl}
       - PayPal__WebhookId=${PayPal__WebhookId}
+      - PayPal__ReturnUrl=${PayPal__ReturnUrl}
+      - PayPal__CancelUrl=${PayPal__CancelUrl}
     ports:
       - "5190:5190"
     networks:

@@ -25,3 +25,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Fonts embedded in the PDF reports so č, ć, š, ž, đ render correctly.
+  assets:
+    - assets/fonts/Roboto-Regular.ttf
+    - assets/fonts/Roboto-Bold.ttf

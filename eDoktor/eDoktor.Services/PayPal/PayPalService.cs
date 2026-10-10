@@ -17,6 +17,10 @@ namespace eDoktor.Services.PayPal
         public string ClientSecret { get; set; } = string.Empty;
         public string BaseUrl { get; set; } = "https://api-m.sandbox.paypal.com";
         public string WebhookId { get; set; } = string.Empty;
+        // Where PayPal redirects after the payer approves / cancels. The mobile WebView intercepts these
+        // URLs (they are never actually loaded), so any https URL the app recognises works.
+        public string ReturnUrl { get; set; } = string.Empty;
+        public string CancelUrl { get; set; } = string.Empty;
     }
 
     // Pure PayPal HTTP gateway — no database access, no dynamic typing.
@@ -61,6 +65,9 @@ namespace eDoktor.Services.PayPal
             using var req = new HttpRequestMessage(HttpMethod.Post, "/v2/checkout/orders");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
+            if (string.IsNullOrWhiteSpace(_opts.ReturnUrl) || string.IsNullOrWhiteSpace(_opts.CancelUrl))
+                throw new UserException("Plaćanje nije podešeno (PayPal__ReturnUrl / PayPal__CancelUrl).");
+
             var orderBody = new
             {
                 intent = "CAPTURE",
@@ -71,6 +78,14 @@ namespace eDoktor.Services.PayPal
                         reference_id = referenceId,
                         amount = new { currency_code = currency, value = amount.ToString("F2", CultureInfo.InvariantCulture) }
                     }
+                },
+                application_context = new
+                {
+                    brand_name = "eDoktor",
+                    shipping_preference = "NO_SHIPPING",
+                    user_action = "PAY_NOW",
+                    return_url = _opts.ReturnUrl,
+                    cancel_url = _opts.CancelUrl
                 }
             };
             req.Content = new StringContent(JsonConvert.SerializeObject(orderBody), Encoding.UTF8, "application/json");
@@ -85,7 +100,8 @@ namespace eDoktor.Services.PayPal
             string? approveUrl = null;
             foreach (var l in data["links"] ?? new JArray())
             {
-                if ((string?)l["rel"] == "approve") { approveUrl = (string?)l["href"]; break; }
+                var rel = (string?)l["rel"];
+                if (rel == "approve" || rel == "payer-action") { approveUrl = (string?)l["href"]; break; }
             }
 
             return new PayPalOrderResult(orderId, approveUrl);
@@ -104,10 +120,14 @@ namespace eDoktor.Services.PayPal
                 throw new UserException($"PayPal capture error: {(int)resp.StatusCode} {body}");
 
             var data = JObject.Parse(body);
-            var captureId = (string?)data["purchase_units"]?[0]?["payments"]?["captures"]?[0]?["id"]
-                ?? throw new UserException("PayPal did not return a capture id.");
+            var capture = data["purchase_units"]?[0]?["payments"]?["captures"]?[0]
+                ?? throw new UserException("PayPal did not return a capture.");
+            var captureId = (string?)capture["id"] ?? throw new UserException("PayPal did not return a capture id.");
+            var status = (string?)capture["status"] ?? string.Empty;
+            var value = decimal.TryParse((string?)capture["amount"]?["value"], NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : 0m;
+            var currency = (string?)capture["amount"]?["currency_code"] ?? string.Empty;
 
-            return new PayPalCaptureResult(captureId);
+            return new PayPalCaptureResult(captureId, status, value, currency);
         }
 
         public async Task<bool> VerifyWebhookAsync(IDictionary<string, string> headers, string rawBody)

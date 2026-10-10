@@ -5,12 +5,14 @@ import 'screens/login_screen.dart';
 import 'screens/shell_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_store.dart';
+import 'services/report_pdf.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AuthStore.load();
+  await ReportPdf.loadFonts();
 
   // On a 401 from the API, clear the session and return to the login screen.
   ApiClient.onUnauthorized = () {

@@ -134,6 +134,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   String _refundBlockedReason(Payment p) => switch (p.status) {
         'Refunded' => 'Povrat je već izvršen.',
         'Created' => 'Uplata nije naplaćena.',
+        'Cancelled' => 'Pacijent nije završio plaćanje.',
         _ => 'Povrat je moguć samo za otkazane termine.',
       };
 
@@ -170,6 +171,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             DropdownMenuItem(value: 'Captured', child: Text('Naplaćeno')),
             DropdownMenuItem(value: 'Created', child: Text('Na čekanju')),
             DropdownMenuItem(value: 'Refunded', child: Text('Vraćeno')),
+            DropdownMenuItem(value: 'Cancelled', child: Text('Napušteno')),
           ],
           onChanged: (v) { setState(() => _status = v); _refresh(resetPage: true); },
         )),

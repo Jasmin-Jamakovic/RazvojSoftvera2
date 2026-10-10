@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.edoktor_mobile"
+    namespace = "com.edoktor.mobile"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "29.0.13113456"
 
@@ -21,10 +21,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.edoktor_mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.edoktor.mobile"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -33,11 +30,8 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // The APK is built for review/grading only, so it is signed with the debug key.
             signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }

@@ -115,6 +115,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     final (label, fg, bg, icon) = switch (p.status) {
       'Captured' => ('Plaćeno', AppColors.primary, AppColors.tint, Icons.check_circle_outline),
       'Refunded' => ('Vraćeno', const Color(0xFF1565C0), const Color(0xFFE3F0FD), Icons.undo),
+      'Cancelled' => ('Napušteno', AppColors.muted, const Color(0xFFECEFF3), Icons.close),
       _ => ('Na čekanju', const Color(0xFFEF6C00), const Color(0xFFFFF2E0), Icons.hourglass_empty),
     };
     final refunded = p.status == 'Refunded';
@@ -133,7 +134,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
             ]),
           ),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('${refunded ? '+' : '−'}${_money.format(p.amount)}',
+            Text('${refunded ? '+' : p.status == 'Captured' ? '−' : ''}${_money.format(p.amount)}',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: refunded ? const Color(0xFF1565C0) : AppColors.ink)),
             const SizedBox(height: 4),
             Pill(label, fg: fg, bg: bg),

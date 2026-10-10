@@ -31,11 +31,13 @@ namespace eDoktor.Services.Payments
         private readonly ICurrentUserService _current;
         private readonly IAppointmentService _appointments;
         private readonly IMapper _mapper;
+        private readonly PayPalOptions _paypalOptions;
 
         public PaymentService(eDoktorDbContext db, IPayPalService paypal, IRabbitMQService rabbit,
             INotificationService notifications, ICurrentUserService current,
-            IAppointmentService appointments, IMapper mapper)
+            IAppointmentService appointments, IMapper mapper, PayPalOptions paypalOptions)
         {
+            _paypalOptions = paypalOptions;
             _db = db;
             _paypal = paypal;
             _rabbit = rabbit;
@@ -145,14 +147,16 @@ namespace eDoktor.Services.Payments
                 ?? throw new NotFoundException("Appointment not found");
 
             await EnsureOwnerOrAdminAsync(appt.PatientId, "You can only pay for your own appointment.");
+            if (appt.StateMachine != nameof(PendingAppointmentState))
+                throw new UserException("Plaćanje je moguće samo za termin koji čeka plaćanje.");
 
-            // Double-charge guard: never start a new order when one is already settled/in-flight.
-            var existing = await _db.PayPalPayments
-                .Where(p => p.AppointmentId == appt.Id)
-                .OrderByDescending(p => p.Id)
-                .FirstOrDefaultAsync();
-            if (existing != null && (existing.Status == PaymentStatus.Captured || existing.Status == PaymentStatus.Created))
-                throw new UserException("A payment for this appointment already exists.");
+            // Double-charge guard: a settled payment blocks a new one. An unfinished order (patient left the
+            // PayPal page) is retired so the patient can retry; it can no longer be captured.
+            var previous = await _db.PayPalPayments.Where(p => p.AppointmentId == appt.Id).ToListAsync();
+            if (previous.Any(p => p.Status == PaymentStatus.Captured || p.Status == PaymentStatus.Refunded))
+                throw new UserException("Termin je već plaćen.");
+            foreach (var p in previous.Where(p => p.Status == PaymentStatus.Created))
+                p.Status = PaymentStatus.Cancelled;
 
             // Amount comes from the server-side catalog (appointment price), never from the client.
             var order = await _paypal.CreateOrderAsync(appt.Price, "EUR", $"appointment-{appt.Id}");
@@ -173,7 +177,14 @@ namespace eDoktor.Services.Payments
             await _db.SaveChangesAsync();
             await tx.CommitAsync();
 
-            return new PayPalOrderResponse { OrderId = order.OrderId, ApproveUrl = order.ApproveUrl, AppointmentId = appt.Id };
+            return new PayPalOrderResponse
+            {
+                OrderId = order.OrderId,
+                ApproveUrl = order.ApproveUrl,
+                AppointmentId = appt.Id,
+                ReturnUrl = _paypalOptions.ReturnUrl,
+                CancelUrl = _paypalOptions.CancelUrl
+            };
         }
 
         public async Task<PaymentResponse> CaptureAsync(string orderId)
@@ -188,8 +199,15 @@ namespace eDoktor.Services.Payments
             // Idempotency: if already captured, don't call PayPal again or re-run side effects.
             if (payment.Status == PaymentStatus.Captured)
                 return _mapper.Map<PaymentResponse>(payment);
+            if (payment.Status != PaymentStatus.Created)
+                throw new UserException("Ova narudžba više nije važeća. Pokrenite plaćanje ponovo.");
 
             var capture = await _paypal.CaptureOrderAsync(orderId);
+            // Only a completed capture of exactly the charged amount confirms the appointment.
+            if (capture.Status != "COMPLETED")
+                throw new UserException("PayPal nije potvrdio naplatu. Pokušajte ponovo.");
+            if (capture.Amount != payment.Amount || capture.Currency != payment.Currency)
+                throw new UserException("Naplaćeni iznos se ne podudara sa cijenom termina.");
 
             await using var tx = await _db.Database.BeginTransactionAsync();
             payment.CaptureId = capture.CaptureId;

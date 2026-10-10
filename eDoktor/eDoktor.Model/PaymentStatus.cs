@@ -6,5 +6,7 @@ namespace eDoktor.Model
         public const string Created = "Created";
         public const string Captured = "Captured";
         public const string Refunded = "Refunded";
+        // An unfinished order replaced by a newer one (the patient abandoned the PayPal page and retried).
+        public const string Cancelled = "Cancelled";
     }
 }

@@ -135,7 +135,9 @@ var paypalOpts = new PayPalOptions
     ClientId = Environment.GetEnvironmentVariable("PayPal__ClientId") ?? string.Empty,
     ClientSecret = Environment.GetEnvironmentVariable("PayPal__ClientSecret") ?? string.Empty,
     BaseUrl = Environment.GetEnvironmentVariable("PayPal__BaseUrl") ?? "https://api-m.sandbox.paypal.com",
-    WebhookId = Environment.GetEnvironmentVariable("PayPal__WebhookId") ?? string.Empty
+    WebhookId = Environment.GetEnvironmentVariable("PayPal__WebhookId") ?? string.Empty,
+    ReturnUrl = Environment.GetEnvironmentVariable("PayPal__ReturnUrl") ?? string.Empty,
+    CancelUrl = Environment.GetEnvironmentVariable("PayPal__CancelUrl") ?? string.Empty
 };
 builder.Services.AddSingleton(paypalOpts);
 builder.Services.AddHttpClient<IPayPalService, PayPalService>();

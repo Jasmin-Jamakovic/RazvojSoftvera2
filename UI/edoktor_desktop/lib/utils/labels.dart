@@ -3,6 +3,7 @@ String paymentStatusLabel(String status) => switch (status) {
       'Captured' => 'Naplaćeno',
       'Created' => 'Na čekanju',
       'Refunded' => 'Vraćeno',
+      'Cancelled' => 'Napušteno',
       _ => status,
     };
 

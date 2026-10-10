@@ -7,7 +7,7 @@ namespace eDoktor.Services.PayPal
     public record PayPalOrderResult(string OrderId, string? ApproveUrl);
 
     // Result of capturing a PayPal order.
-    public record PayPalCaptureResult(string CaptureId);
+    public record PayPalCaptureResult(string CaptureId, string Status, decimal Amount, string Currency);
 
     // Thin PayPal REST gateway: talks HTTP to PayPal only. It performs NO database work,
     // so it can safely be a transient typed HttpClient (no captive DbContext).
