@@ -40,7 +40,8 @@ class Appointment {
   final String status;
   final double price;
   final Map<String, dynamic>? payment;
-  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment});
+  final String? cancellationReason;
+  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason});
   bool get isOnline => type == 1;
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
         id: j['id'], patientId: j['patientId'], patientName: j['patientName'],
@@ -48,7 +49,8 @@ class Appointment {
         startUtc: DateTime.parse(j['startUtc']).toLocal(),
         type: j['type'] ?? 0, status: j['status'] ?? 'Pending',
         price: (j['price'] ?? 0).toDouble(),
-        payment: j['payment'] as Map<String, dynamic>?);
+        payment: j['payment'] as Map<String, dynamic>?,
+        cancellationReason: j['cancellationReason']);
 }
 
 class TimeSlot {

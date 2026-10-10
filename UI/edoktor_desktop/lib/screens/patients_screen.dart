@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/user.dart';
 import '../providers/providers.dart';
 import '../widgets/entity_avatar.dart';
+import 'patient_details_screen.dart';
 
 class PatientsScreen extends StatefulWidget {
   const PatientsScreen({super.key});
@@ -53,6 +54,8 @@ class _PatientsScreenState extends State<PatientsScreen> {
             leading: EntityAvatar(path: u.hasImage ? '/api/users/${u.id}/photo' : null, initials: _initials(u)),
             title: Text(u.fullName),
             subtitle: Text('${u.username} • ${u.email}'),
+            trailing: const Tooltip(message: 'Historija termina i zdravstveni karton', child: Icon(Icons.chevron_right)),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => PatientDetailsScreen(patient: u))),
           );
         });
       }))),

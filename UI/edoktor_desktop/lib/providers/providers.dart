@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../models/dashboard.dart';
 import '../models/entities.dart';
+import '../models/medical_record.dart';
 import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/auth_store.dart';
@@ -88,6 +89,18 @@ class PatientProvider extends ChangeNotifier {
   Future<List<User>> list({String? search}) async {
     final res = await ApiClient.get('/api/users', query: {'role': 'patient', 'search': search?.isEmpty == true ? null : search, 'pageSize': 100});
     return (res['items'] as List? ?? []).map((e) => User.fromJson(e)).toList();
+  }
+
+  /// Null when the patient has no medical record yet.
+  Future<MedicalRecord?> medicalRecord(int patientId) async {
+    final res = await ApiClient.get('/api/medical-records/patient/$patientId');
+    return res == null ? null : MedicalRecord.fromJson(res);
+  }
+
+  Future<PagedList<Appointment>> visits(int patientId, {int page = 0, int pageSize = 10}) async {
+    final res = await ApiClient.get('/api/appointments', query: {'patientId': patientId, 'page': page, 'pageSize': pageSize});
+    final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+    return PagedList(items, res['totalCount'] ?? items.length);
   }
 }
 
