@@ -25,6 +25,14 @@ class DashboardProvider extends ChangeNotifier {
     final res = await ApiClient.get('/api/dashboard/stats');
     return DashboardStats.fromJson(res);
   }
+
+  /// [from] inclusive, [to] exclusive (local dates).
+  Future<DoctorReport> doctorReport({required DateTime from, required DateTime to, int? specializationId}) async {
+    final res = await ApiClient.get('/api/dashboard/doctor-report', query: {
+      'from': from.toUtc().toIso8601String(), 'to': to.toUtc().toIso8601String(), 'specializationId': specializationId,
+    });
+    return DoctorReport.fromJson(res);
+  }
 }
 
 class SpecializationProvider extends ChangeNotifier {
@@ -133,6 +141,21 @@ class AppointmentProvider extends ChangeNotifier {
   Future<List<Appointment>> list({String? status, int? doctorId}) async {
     final res = await ApiClient.get('/api/appointments', query: {'status': status, 'doctorId': doctorId, 'pageSize': 200});
     return (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+  }
+  /// Every appointment matching the filters, fetched page by page (the API caps a page at 100).
+  Future<List<Appointment>> listAll({String? status, DateTime? from, DateTime? to}) async {
+    const pageSize = 100;
+    final all = <Appointment>[];
+    for (var page = 0;; page++) {
+      final res = await ApiClient.get('/api/appointments', query: {
+        'status': status, 'from': from?.toUtc().toIso8601String(), 'to': to?.toUtc().toIso8601String(),
+        'page': page, 'pageSize': pageSize,
+      });
+      final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+      all.addAll(items);
+      if (items.length < pageSize) break;
+    }
+    return all;
   }
   Future<void> confirm(int id) => ApiClient.post('/api/appointments/$id/confirm');
   Future<void> complete(int id) => ApiClient.post('/api/appointments/$id/complete');

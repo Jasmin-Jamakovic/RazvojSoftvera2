@@ -22,3 +22,18 @@ class DoctorRevenueRow {
         appointmentCount: j['appointmentCount'] ?? 0, averageRating: (j['averageRating'] ?? 0).toDouble(),
         revenue: (j['revenue'] ?? 0).toDouble());
 }
+
+class DoctorReport {
+  final DateTime from, to;
+  final String? specializationName, topSpecialization, topDoctor;
+  final int totalExams;
+  final double totalRevenue, topDoctorRating;
+  final List<DoctorRevenueRow> rows;
+  DoctorReport({required this.from, required this.to, this.specializationName, required this.totalExams, required this.totalRevenue, this.topSpecialization, this.topDoctor, required this.topDoctorRating, required this.rows});
+  factory DoctorReport.fromJson(Map<String, dynamic> j) => DoctorReport(
+        from: DateTime.parse(j['from']), to: DateTime.parse(j['to']),
+        specializationName: j['specializationName'],
+        totalExams: j['totalExams'] ?? 0, totalRevenue: (j['totalRevenue'] ?? 0).toDouble(),
+        topSpecialization: j['topSpecialization'], topDoctor: j['topDoctor'], topDoctorRating: (j['topDoctorRating'] ?? 0).toDouble(),
+        rows: (j['rows'] as List? ?? []).map((e) => DoctorRevenueRow.fromJson(e)).toList());
+}

@@ -33,28 +33,21 @@ class ReportPdf {
             style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
       );
 
-  /// Report 1 — doctor performance: per-doctor appointment counts, ratings and revenue,
-  /// preceded by summary KPIs.
-  static pw.Document doctorPerformance(DashboardStats d) {
+  /// Report 1 — doctor performance for a period: exams, ratings and revenue per doctor, with summary KPIs.
+  static pw.Document doctorPerformance(DoctorReport r, {required String filterDescription}) {
     final doc = pw.Document();
-    final totalRevenue = d.rows.fold<double>(0, (a, r) => a + r.revenue);
-    final totalAppts = d.rows.fold<int>(0, (a, r) => a + r.appointmentCount);
-
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(28),
       footer: _footer,
-      header: (_) => pw.SizedBox(),
       build: (ctx) => [
-        _header('Izvještaj o učinku ljekara'),
+        _header('Izvještaj o učinku ljekara', subtitle: filterDescription),
         pw.SizedBox(height: 8),
         pw.Wrap(spacing: 16, runSpacing: 8, children: [
-          _kpi('Ukupno ljekara', '${d.totalDoctors}'),
-          _kpi('Ukupno pacijenata', '${d.totalPatients}'),
-          _kpi('Ukupno termina', '${d.totalAppointments}'),
-          _kpi('Termini danas', '${d.appointmentsToday}'),
-          _kpi('Prihod (mjesec)', _money.format(d.revenueThisMonth)),
-          _kpi('Top specijalizacija', d.topSpecialization ?? '-'),
+          _kpi('Ukupno pregleda', '${r.totalExams}'),
+          _kpi('Prihod', _money.format(r.totalRevenue)),
+          _kpi('Najtraženija specijalizacija', r.topSpecialization ?? '-'),
+          _kpi('Najbolje ocijenjen ljekar', r.topDoctor == null ? '-' : '${r.topDoctor} (${r.topDoctorRating.toStringAsFixed(1)})'),
         ]),
         pw.SizedBox(height: 16),
         pw.Text('Pregled po ljekaru', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
@@ -65,16 +58,16 @@ class ReportPdf {
           cellStyle: const pw.TextStyle(fontSize: 10),
           cellAlignments: {0: pw.Alignment.centerLeft, 1: pw.Alignment.centerLeft, 2: pw.Alignment.center, 3: pw.Alignment.center, 4: pw.Alignment.centerRight},
           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F5F9)),
-          headers: ['Ljekar', 'Specijalizacija', 'Br. pregleda', 'Prosj. ocjena', 'Prihod'],
-          data: d.rows
-              .map((r) => [r.doctorName, r.specialization ?? '-', '${r.appointmentCount}', r.averageRating.toStringAsFixed(1), _money.format(r.revenue)])
+          headers: ['Ljekar', 'Specijalizacija', 'Broj pregleda', 'Prosječna ocjena', 'Prihod'],
+          data: r.rows
+              .map((x) => [x.doctorName, x.specialization ?? '-', '${x.appointmentCount}', x.averageRating == 0 ? '-' : x.averageRating.toStringAsFixed(1), _money.format(x.revenue)])
               .toList(),
         ),
         pw.Divider(color: PdfColors.grey400),
         pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
           pw.Text('UKUPNO', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-          pw.Text('Pregleda: $totalAppts', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-          pw.Text('Prihod: ${_money.format(totalRevenue)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+          pw.Text('Pregleda: ${r.totalExams}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+          pw.Text('Prihod: ${_money.format(r.totalRevenue)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
         ]),
       ],
     ));
@@ -83,7 +76,7 @@ class ReportPdf {
 
   /// Report 2 — appointments list over the current data set, with status filter info
   /// and a per-status summary.
-  static pw.Document appointments(List<Appointment> items, {String? statusFilter}) {
+  static pw.Document appointments(List<Appointment> items, {required String filterDescription}) {
     final doc = pw.Document();
     final byStatus = <String, int>{};
     var totalRevenue = 0.0;
@@ -91,9 +84,7 @@ class ReportPdf {
       byStatus[a.status] = (byStatus[a.status] ?? 0) + 1;
       totalRevenue += a.price;
     }
-    final sub = statusFilter == null || statusFilter.isEmpty
-        ? 'Svi statusi · ${items.length} termina'
-        : 'Status: $statusFilter · ${items.length} termina';
+    final sub = '$filterDescription · ${items.length} termina';
 
     doc.addPage(pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
@@ -105,7 +96,7 @@ class ReportPdf {
         pw.Wrap(spacing: 16, runSpacing: 8, children: [
           _kpi('Ukupno termina', '${items.length}'),
           _kpi('Ukupan prihod', _money.format(totalRevenue)),
-          for (final e in byStatus.entries) _kpi(e.key, '${e.value}'),
+          for (final e in byStatus.entries) _kpi(appointmentStatusLabel(e.key), '${e.value}'),
         ]),
         pw.SizedBox(height: 16),
         pw.TableHelper.fromTextArray(
@@ -121,7 +112,7 @@ class ReportPdf {
                     a.patientName ?? '-',
                     a.doctorName ?? '-',
                     a.type == 1 ? 'Online' : 'U ordinaciji',
-                    a.status,
+                    appointmentStatusLabel(a.status),
                     _money.format(a.price),
                   ])
               .toList(),

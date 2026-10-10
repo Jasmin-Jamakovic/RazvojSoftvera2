@@ -1,4 +1,5 @@
 using eDoktor.Model;
+using System;
 using System.Threading.Tasks;
 using eDoktor.Model.Responses;
 using eDoktor.Services.Dashboard;
@@ -16,5 +17,9 @@ namespace eDoktor.API.Controllers
         [HttpGet("stats")]
         public Task<DashboardStatsResponse> Stats([FromQuery] int? year, [FromQuery] int? month, [FromQuery] int? specializationId)
             => _svc.GetStatsAsync(year, month, specializationId);
+
+        [HttpGet("doctor-report")]
+        public Task<DoctorReportResponse> DoctorReport([FromQuery] DateTime from, [FromQuery] DateTime to, [FromQuery] int? specializationId)
+            => _svc.GetDoctorReportAsync(from, to, specializationId);
     }
 }
