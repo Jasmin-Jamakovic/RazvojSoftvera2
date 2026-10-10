@@ -9,7 +9,8 @@ namespace eDoktor.Model.Messages
         AppointmentCancelled = 4,
         PaymentReceipt = 5,
         PrescriptionIssued = 6,
-        AppointmentRescheduled = 7
+        AppointmentRescheduled = 7,
+        PasswordReset = 8
     }
 
     public class EmailMessage

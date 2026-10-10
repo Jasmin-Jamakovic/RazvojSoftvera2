@@ -11,6 +11,7 @@ namespace eDoktor.Model.Requests
         [Required, EmailAddress, MaxLength(100)] public string Email { get; set; } = string.Empty;
         [Required, MinLength(6)] public string Password { get; set; } = string.Empty;
         public string? PhoneNumber { get; set; }
+        [Required(ErrorMessage = "Datum rođenja je obavezan.")]
         public DateTime? DateOfBirth { get; set; }
         public string? Gender { get; set; }
         public string? BloodType { get; set; }

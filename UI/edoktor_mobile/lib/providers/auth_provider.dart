@@ -43,6 +43,16 @@ class AuthProvider extends ChangeNotifier {
     });
   }
 
+  /// Requests a reset code by email. Returns the server's message (identical whether or not the account exists).
+  Future<String> forgotPassword(String email) async {
+    final res = await ApiClient.post('/api/auth/forgot-password', {'email': email.trim()});
+    return (res?['message'] as String?) ?? 'Kod za resetovanje lozinke je poslan na vaš email.';
+  }
+
+  Future<void> resetPassword({required String email, required String code, required String newPassword}) async {
+    await ApiClient.post('/api/auth/reset-password', {'email': email.trim(), 'code': code.trim(), 'newPassword': newPassword});
+  }
+
   Future<void> logout() async {
     await AuthStore.clear();
     notifyListeners();

@@ -4,6 +4,7 @@ import '../models/appointment.dart';
 import '../providers/appointment_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/confirm.dart';
+import '../widgets/review_sheet.dart';
 import '../widgets/ui.dart';
 import 'paypal_checkout_screen.dart';
 import 'video_call_screen.dart';
@@ -61,6 +62,12 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
     }
   }
 
+  Future<void> _review(Appointment a) async {
+    if (!await ReviewSheet.show(context, a) || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Hvala! Vaša ocjena je sačuvana.')));
+    _refresh();
+  }
+
   static bool _isUpcoming(Appointment a, DateTime now) =>
       (a.status == 'Pending' || a.status == 'Confirmed') && a.endUtc.isAfter(now);
 
@@ -112,6 +119,7 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
                     onPay: _pay,
                     onJoin: _join,
                     onCancel: _cancel,
+                    onReview: _review,
                   ),
                 );
               },
@@ -129,6 +137,7 @@ class _AppointmentCard extends StatelessWidget {
   final ValueChanged<Appointment> onPay;
   final ValueChanged<Appointment> onJoin;
   final ValueChanged<Appointment> onCancel;
+  final ValueChanged<Appointment> onReview;
 
   const _AppointmentCard({
     required this.appointment,
@@ -136,6 +145,7 @@ class _AppointmentCard extends StatelessWidget {
     required this.onPay,
     required this.onJoin,
     required this.onCancel,
+    required this.onReview,
   });
 
   @override
@@ -162,6 +172,8 @@ class _AppointmentCard extends StatelessWidget {
           style: featured ? _ActionStyle.white : _ActionStyle.primary,
           onTap: () => onJoin(a),
         ),
+      if (a.canReview)
+        _ActionButton(label: 'Ocijeni ljekara', icon: Icons.star_outline_rounded, style: _ActionStyle.primary, onTap: () => onReview(a)),
       if (canCancel)
         _ActionButton(label: 'Otkaži', style: featured ? _ActionStyle.glass : _ActionStyle.soft, onTap: () => onCancel(a)),
     ];
@@ -205,10 +217,12 @@ class _AppointmentCard extends StatelessWidget {
           ),
           StatusPill(a.status, isPaid: a.isPaid, onGradient: featured),
         ]),
-        if (featured || a.isPaid)
+        if (featured || a.isPaid || a.reviewRating != null)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Wrap(spacing: 8, children: [
+              if (a.reviewRating != null)
+                Pill('Vaša ocjena: ${a.reviewRating}/5', icon: Icons.star_rounded, fg: const Color(0xFF8A6100), bg: const Color(0xFFFFF4D6)),
               if (featured)
                 Pill(relativeFromNow(a.startUtc), icon: Icons.schedule, fg: Colors.white, bg: Colors.white.withValues(alpha: 0.16)),
               if (a.isPaid)

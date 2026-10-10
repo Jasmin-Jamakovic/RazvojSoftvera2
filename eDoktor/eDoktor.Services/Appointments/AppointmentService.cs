@@ -30,6 +30,7 @@ namespace eDoktor.Services.Appointments
                 .Include(a => a.TimeSlot)
                 .Include(a => a.Payment)
                 .Include(a => a.VideoCallSession)
+                .Include(a => a.Review)
                 .AsQueryable();
 
             if (s.PatientId.HasValue) q = q.Where(a => a.PatientId == s.PatientId.Value);
@@ -57,6 +58,7 @@ namespace eDoktor.Services.Appointments
                 .Include(a => a.TimeSlot)
                 .Include(a => a.Payment)
                 .Include(a => a.VideoCallSession)
+                .Include(a => a.Review)
                 .FirstOrDefaultAsync(a => a.Id == id);
             return a == null ? null : Map(a);
         }
@@ -110,7 +112,8 @@ namespace eDoktor.Services.Appointments
             CancelledAt = a.CancelledAt,
             CancellationReason = a.CancellationReason,
             Payment = a.Payment == null ? null : _mapper.Map<PaymentResponse>(a.Payment),
-            VideoRoomId = a.VideoCallSession?.RoomId
+            VideoRoomId = a.VideoCallSession?.RoomId,
+            ReviewRating = a.Review is { IsDeleted: false } ? a.Review.Rating : null
         };
     }
 }

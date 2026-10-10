@@ -44,22 +44,24 @@ namespace eDoktor.Services.Reviews
         public async Task<ReviewResponse> CreateAsync(ReviewUpsertRequest req, int patientId)
         {
             var appt = await _db.Appointments.FirstOrDefaultAsync(a => a.Id == req.AppointmentId)
-                ?? throw new UserException("Appointment not found");
-            if (appt.PatientId != patientId) throw new UserException("Not your appointment");
+                ?? throw new NotFoundException("Termin nije pronađen.");
+            if (appt.PatientId != patientId) throw new ForbiddenException("Možete ocijeniti samo vlastiti pregled.");
             if (appt.StateMachine != nameof(CompletedAppointmentState))
-                throw new UserException("You can only review a completed appointment");
-            if (await _db.Reviews.AnyAsync(r => r.AppointmentId == req.AppointmentId && !r.IsDeleted))
-                throw new UserException("Review already exists for this appointment");
+                throw new UserException("Pregled možete ocijeniti tek nakon što je završen.");
+            // One review per appointment (unique index). A review an admin removed is re-used for the new one.
+            var r = await _db.Reviews.FirstOrDefaultAsync(x => x.AppointmentId == req.AppointmentId);
+            if (r is { IsDeleted: false })
+                throw new UserException("Već ste ocijenili ovaj pregled.");
 
-            var r = new Review
+            if (r == null)
             {
-                AppointmentId = req.AppointmentId,
-                DoctorId = appt.DoctorId,
-                PatientId = patientId,
-                Rating = req.Rating,
-                Comment = req.Comment
-            };
-            _db.Reviews.Add(r);
+                r = new Review { AppointmentId = req.AppointmentId, DoctorId = appt.DoctorId, PatientId = patientId };
+                _db.Reviews.Add(r);
+            }
+            r.Rating = req.Rating;
+            r.Comment = string.IsNullOrWhiteSpace(req.Comment) ? null : req.Comment.Trim();
+            r.CreatedAt = System.DateTime.UtcNow;
+            r.IsDeleted = false;
             await _db.SaveChangesAsync();
 
             await _cache.RemoveAsync($"recs:{patientId}");

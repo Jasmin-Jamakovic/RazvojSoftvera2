@@ -105,6 +105,12 @@ namespace eDoktor.Services.Users
 
         public async Task<LoginResponse> RegisterPatientAsync(PatientRegisterRequest req)
         {
+            var today = System.DateTime.UtcNow.Date;
+            if (req.DateOfBirth!.Value.Date > today)
+                throw new UserException("Datum rođenja ne može biti u budućnosti.");
+            if (req.DateOfBirth.Value.Date < today.AddYears(-120))
+                throw new UserException("Unesite ispravan datum rođenja.");
+
             if (await _db.Users.AnyAsync(u => u.Username == req.Username))
                 throw new UserException("Username already taken");
             if (await _db.Users.AnyAsync(u => u.Email == req.Email))
@@ -169,6 +175,76 @@ namespace eDoktor.Services.Users
             u.TokenVersion++; // invalidate existing sessions after a password change
             await _db.SaveChangesAsync();
             return true;
+        }
+
+        private const int ResetCodeMinutes = 15;
+        private const int ResetCodeMaxAttempts = 5;
+
+        // Always completes silently so the response never reveals whether an account exists for the email.
+        public async Task ForgotPasswordAsync(ForgotPasswordRequest req)
+        {
+            var email = req.Email.Trim();
+            var u = await _db.Users.FirstOrDefaultAsync(x => x.Email == email && !x.IsDeleted);
+            if (u == null) return;
+
+            var now = System.DateTime.UtcNow;
+            var active = await _db.PasswordResetCodes.Where(c => c.UserId == u.Id && c.UsedAt == null && c.ExpiresAt > now).ToListAsync();
+            // Throttle: at most one new code per minute.
+            if (active.Any(c => c.CreatedAt > now.AddMinutes(-1))) return;
+
+            // Only the newest code is valid; older ones are retired.
+            foreach (var old in active) old.UsedAt = now;
+
+            var code = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+            _db.PasswordResetCodes.Add(new PasswordResetCode
+            {
+                UserId = u.Id,
+                CodeHash = _hasher.Hash(code),
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(ResetCodeMinutes)
+            });
+            await _db.SaveChangesAsync();
+
+            await _rabbit.PublishEmailAsync(new EmailMessage
+            {
+                To = u.Email,
+                FirstName = u.FirstName,
+                LastName = u.LastName,
+                Subject = "eDoktor - kod za resetovanje lozinke",
+                Body = $"Vaš kod za resetovanje lozinke je {code}. Kod vrijedi {ResetCodeMinutes} minuta. Ako niste zatražili promjenu lozinke, zanemarite ovu poruku.",
+                Kind = EmailKind.PasswordReset
+            });
+        }
+
+        public async Task ResetPasswordAsync(ResetPasswordRequest req)
+        {
+            const string invalid = "Kod je neispravan ili je istekao. Zatražite novi kod.";
+            var email = req.Email.Trim();
+            var u = await _db.Users.FirstOrDefaultAsync(x => x.Email == email && !x.IsDeleted)
+                ?? throw new UserException(invalid);
+
+            var now = System.DateTime.UtcNow;
+            var entry = await _db.PasswordResetCodes
+                .Where(c => c.UserId == u.Id && c.UsedAt == null && c.ExpiresAt > now)
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefaultAsync()
+                ?? throw new UserException(invalid);
+
+            if (!_hasher.Verify(req.Code, entry.CodeHash))
+            {
+                entry.FailedAttempts++;
+                if (entry.FailedAttempts >= ResetCodeMaxAttempts) entry.UsedAt = now;
+                await _db.SaveChangesAsync();
+                throw new UserException(entry.UsedAt == null
+                    ? $"Kod nije ispravan. Preostalo pokušaja: {ResetCodeMaxAttempts - entry.FailedAttempts}."
+                    : "Previše neuspješnih pokušaja. Zatražite novi kod.");
+            }
+
+            entry.UsedAt = now;
+            u.PasswordHash = _hasher.Hash(req.NewPassword);
+            u.LastModifiedAt = now;
+            u.TokenVersion++; // sign out every existing session
+            await _db.SaveChangesAsync();
         }
 
         // Server-side logout: bump the token version so all previously issued JWTs stop validating.

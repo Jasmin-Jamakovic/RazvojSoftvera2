@@ -26,6 +26,7 @@ namespace eDoktor.Services.Database
         public DbSet<Notification> Notifications { get; set; } = null!;
         public DbSet<PayPalPayment> PayPalPayments { get; set; } = null!;
         public DbSet<VideoCallSession> VideoCallSessions { get; set; } = null!;
+        public DbSet<PasswordResetCode> PasswordResetCodes { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -36,6 +37,12 @@ namespace eDoktor.Services.Database
             modelBuilder.Entity<Role>().HasIndex(r => r.Name).IsUnique();
             modelBuilder.Entity<Specialization>().HasIndex(s => s.Name).IsUnique();
             modelBuilder.Entity<City>().HasIndex(c => c.Name).IsUnique();
+
+            modelBuilder.Entity<PasswordResetCode>()
+                .HasOne(p => p.User)
+                .WithMany()
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<User>()
                 .HasOne(u => u.City).WithMany()

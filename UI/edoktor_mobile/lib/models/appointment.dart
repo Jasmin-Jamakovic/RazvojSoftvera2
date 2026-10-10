@@ -12,17 +12,19 @@ class Appointment {
   final String? videoRoomId;
   final Map<String, dynamic>? payment;
   final bool isPaid;
+  final int? reviewRating;
 
   Appointment({
     required this.id, required this.patientId, this.patientName,
     required this.doctorId, this.doctorName,
     required this.startUtc, required this.endUtc,
     required this.type, required this.status, required this.price,
-    this.videoRoomId, this.payment, this.isPaid = false,
+    this.videoRoomId, this.payment, this.isPaid = false, this.reviewRating,
   });
 
   bool get isOnline => type == 1;
   String get typeLabel => isOnline ? 'Online' : 'Uživo';
+  bool get canReview => status == 'Completed' && reviewRating == null;
 
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
         id: j['id'],
@@ -38,5 +40,6 @@ class Appointment {
         videoRoomId: j['videoRoomId'],
         payment: j['payment'] as Map<String, dynamic>?,
         isPaid: j['isPaid'] ?? false,
+        reviewRating: j['reviewRating'],
       );
 }

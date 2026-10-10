@@ -23,6 +23,21 @@ namespace eDoktor.API.Controllers
         [HttpPost("register"), AllowAnonymous]
         public Task<LoginResponse> Register(PatientRegisterRequest req) => _users.RegisterPatientAsync(req);
 
+        // Password reset has to work without a session, so these two are anonymous as well.
+        [HttpPost("forgot-password"), AllowAnonymous]
+        public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest req)
+        {
+            await _users.ForgotPasswordAsync(req);
+            return Ok(new { message = "Ako postoji račun sa ovom email adresom, poslali smo kod za resetovanje lozinke." });
+        }
+
+        [HttpPost("reset-password"), AllowAnonymous]
+        public async Task<IActionResult> ResetPassword(ResetPasswordRequest req)
+        {
+            await _users.ResetPasswordAsync(req);
+            return Ok();
+        }
+
         [HttpGet("me"), Authorize]
         public async Task<UserResponse?> Me()
         {

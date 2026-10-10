@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/doctor.dart';
+import '../models/review.dart';
+import '../providers/doctor_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
 import 'appointment_booking_screen.dart';
@@ -79,6 +82,8 @@ class DoctorDetailsScreen extends StatelessWidget {
                       const SizedBox(height: 10),
                     ],
                     const _InfoRow(icon: Icons.videocam_outlined, label: 'Vrste pregleda', value: 'Uživo · Online konsultacija'),
+                    const SizedBox(height: 20),
+                    _ReviewsSection(doctorId: doctor.id),
                   ]),
                 ),
               ]),
@@ -157,5 +162,57 @@ class _InfoRow extends StatelessWidget {
         ),
       ]),
     );
+  }
+}
+
+/// Latest patient reviews of the doctor.
+class _ReviewsSection extends StatefulWidget {
+  final int doctorId;
+  const _ReviewsSection({required this.doctorId});
+  @override
+  State<_ReviewsSection> createState() => _ReviewsSectionState();
+}
+
+class _ReviewsSectionState extends State<_ReviewsSection> {
+  late final Future<(List<Review>, int)> _f = context.read<DoctorProvider>().reviews(widget.doctorId);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<(List<Review>, int)>(future: _f, builder: (c, s) {
+      if (s.connectionState != ConnectionState.done) {
+        return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+      }
+      if (s.hasError) return Text('Recenzije nije moguće učitati: ${s.error}', style: const TextStyle(color: AppColors.muted));
+      final (items, total) = s.data!;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(total > items.length ? 'Recenzije pacijenata (${items.length} od $total)' : 'Recenzije pacijenata',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        if (items.isEmpty)
+          const Text('Ljekar još nema recenzija.', style: TextStyle(color: AppColors.muted))
+        else
+          for (final r in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: AppCard(
+                padding: const EdgeInsets.all(12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    for (var i = 1; i <= 5; i++)
+                      Icon(i <= r.rating ? Icons.star_rounded : Icons.star_outline_rounded, size: 16, color: AppColors.star),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(r.patientName?.trim().isNotEmpty == true ? r.patientName! : 'Pacijent',
+                        overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                    Text('${r.createdAt.day}.${r.createdAt.month}.${r.createdAt.year}.', style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                  ]),
+                  if (r.comment?.isNotEmpty == true) ...[
+                    const SizedBox(height: 6),
+                    Text(r.comment!, style: const TextStyle(fontSize: 13, height: 1.4, color: Color(0xFF4A5263))),
+                  ],
+                ]),
+              ),
+            ),
+      ]);
+    });
   }
 }

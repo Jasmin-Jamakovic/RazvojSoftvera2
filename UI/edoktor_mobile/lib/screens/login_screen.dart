@@ -4,6 +4,7 @@ import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/validators.dart';
 import '../widgets/ui.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 import 'shell_screen.dart';
 
@@ -117,6 +118,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: const InputDecoration(labelText: 'Lozinka', prefixIcon: Icon(Icons.lock_outline)),
                           validator: (v) => Validators.required(v, 'Lozinka'),
                         ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ForgotPasswordScreen())),
+                            child: const Text('Zaboravili ste lozinku?'),
+                          ),
+                        ),
                         if (_error != null) ...[
                           const SizedBox(height: 12),
                           Container(
@@ -125,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: Text(_error!, style: const TextStyle(color: Color(0xFFC62828), fontSize: 13)),
                           ),
                         ],
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 12),
                         GradientButton(label: 'Prijavi se', busy: _busy, onPressed: _login),
                         const Spacer(),
                         Center(

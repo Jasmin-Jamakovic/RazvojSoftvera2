@@ -15,6 +15,8 @@ namespace eDoktor.Services.Users
         Task<LoginResponse> LoginAsync(LoginRequest req);
         Task<LoginResponse> RegisterPatientAsync(PatientRegisterRequest req);
         Task<bool> ChangePasswordAsync(int userId, ChangePasswordRequest req);
+        Task ForgotPasswordAsync(ForgotPasswordRequest req);
+        Task ResetPasswordAsync(ResetPasswordRequest req);
         Task LogoutAsync(int userId);
     }
 }

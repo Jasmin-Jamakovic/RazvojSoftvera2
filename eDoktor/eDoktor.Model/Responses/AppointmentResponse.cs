@@ -24,5 +24,7 @@ namespace eDoktor.Model.Responses
         // Explicit paid flag so the client can hide the pay button without inspecting payment internals.
         public bool IsPaid => Payment != null && Payment.Status == PaymentStatus.Captured;
         public string? VideoRoomId { get; set; }
+        // Rating the patient gave for this appointment; null when not reviewed yet.
+        public int? ReviewRating { get; set; }
     }
 }

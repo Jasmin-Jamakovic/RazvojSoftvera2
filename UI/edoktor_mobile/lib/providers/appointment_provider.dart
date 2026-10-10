@@ -18,6 +18,14 @@ class AppointmentProvider extends ChangeNotifier {
     return Appointment.fromJson(res);
   }
 
+  Future<void> review(int appointmentId, {required int rating, String? comment}) async {
+    await ApiClient.post('/api/reviews', {
+      'appointmentId': appointmentId,
+      'rating': rating,
+      'comment': (comment?.trim().isEmpty ?? true) ? null : comment!.trim(),
+    });
+  }
+
   Future<Map<String, dynamic>> roomFor(int appointmentId) async {
     final res = await ApiClient.post('/api/video-calls/$appointmentId/room');
     return res as Map<String, dynamic>;
