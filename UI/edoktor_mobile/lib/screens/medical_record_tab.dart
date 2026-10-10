@@ -5,6 +5,7 @@ import '../models/medical_record.dart';
 import '../providers/medical_record_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
+import 'record_details_screen.dart';
 
 enum _Kind { visit, prescription, lab }
 
@@ -149,8 +150,8 @@ class _MedicalRecordTabState extends State<MedicalRecordTab> {
           trailing: fmt.format(e.appointmentDate),
           lines: [
             if (e.therapy != null) ('Terapija', e.therapy!),
-            if (e.notes != null) ('Bilješke', e.notes!),
           ],
+          details: () => RecordDetailsScreen.visit(r, e),
         ),
       for (final p in r.prescriptions)
         _Item(
@@ -166,6 +167,7 @@ class _MedicalRecordTabState extends State<MedicalRecordTab> {
                 [it.dosage, it.frequency, it.duration].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
               ),
           ],
+          details: () => RecordDetailsScreen.prescription(r, p),
         ),
       for (final l in r.labResults)
         _Item(
@@ -174,7 +176,7 @@ class _MedicalRecordTabState extends State<MedicalRecordTab> {
           title: l.title,
           subtitle: l.notes ?? '',
           trailing: fmt.format(l.createdAt),
-          hasFile: l.fileUrl != null,
+          details: () => RecordDetailsScreen.lab(r, l),
         ),
     ];
     out.sort((a, b) => b.date.compareTo(a.date));
@@ -200,6 +202,7 @@ class _MedicalRecordTabState extends State<MedicalRecordTab> {
           child: AppCard(
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.all(12),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => it.details())),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(child: Text(it.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
@@ -222,15 +225,13 @@ class _MedicalRecordTabState extends State<MedicalRecordTab> {
                     ],
                   )),
                 ),
-              if (it.hasFile)
-                const Padding(
-                  padding: EdgeInsets.only(top: 6),
-                  child: Row(children: [
-                    Icon(Icons.attach_file, size: 15, color: AppColors.primary),
-                    SizedBox(width: 4),
-                    Text('Priložen dokument', style: TextStyle(fontSize: 12.5, color: AppColors.primary, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Row(children: [
+                  Text('Detalji i PDF', style: TextStyle(fontSize: 12.5, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                  Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
+                ]),
+              ),
             ]),
           ),
         ),
@@ -246,7 +247,7 @@ class _Item {
   final String subtitle;
   final String trailing;
   final List<(String, String)> lines;
-  final bool hasFile;
+  final Widget Function() details;
 
   _Item({
     required this.kind,
@@ -255,6 +256,6 @@ class _Item {
     required this.subtitle,
     required this.trailing,
     this.lines = const [],
-    this.hasFile = false,
+    required this.details,
   });
 }

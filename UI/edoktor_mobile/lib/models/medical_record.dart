@@ -90,14 +90,12 @@ class LabResult {
   final int id;
   final String title;
   final String? notes;
-  final String? fileUrl;
   final DateTime createdAt;
-  LabResult({required this.id, required this.title, this.notes, this.fileUrl, required this.createdAt});
+  LabResult({required this.id, required this.title, this.notes, required this.createdAt});
   factory LabResult.fromJson(Map<String, dynamic> j) => LabResult(
         id: j['id'],
         title: j['title'] ?? '',
         notes: j['notes'],
-        fileUrl: j['fileUrl'],
         createdAt: DateTime.parse(j['createdAt']).toLocal(),
       );
 }

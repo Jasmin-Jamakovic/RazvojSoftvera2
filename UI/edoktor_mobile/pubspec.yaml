@@ -21,6 +21,8 @@ dependencies:
   signalr_netcore: ^1.4.0
   cached_network_image: ^3.3.1
   image_picker: ^1.1.2
+  pdf: ^3.11.1
+  printing: ^5.13.0
 
 dev_dependencies:
   flutter_test:
@@ -29,3 +31,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Fonts embedded in generated PDFs (prescriptions, lab results) so č, ć, š, ž, đ render correctly.
+  assets:
+    - assets/fonts/Roboto-Regular.ttf
+    - assets/fonts/Roboto-Bold.ttf

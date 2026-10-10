@@ -22,7 +22,8 @@ namespace eDoktor.API.Controllers
         public Task<PagedResult<PaymentResponse>> Get([FromQuery] PaymentSearchObject s)
             => _payments.GetAsync(s);
 
-        [HttpGet("summary"), Authorize(Roles = Roles.Admin)]
+        // Admins get totals for all payments, patients for their own (scoping is done in the service).
+        [HttpGet("summary")]
         public Task<PaymentSummaryResponse> Summary([FromQuery] PaymentSearchObject s)
             => _payments.GetSummaryAsync(s);
 

@@ -7,6 +7,7 @@ import '../widgets/ui.dart';
 import 'change_password_screen.dart';
 import 'login_screen.dart';
 import 'notifications_screen.dart';
+import 'payment_history_screen.dart';
 import 'profile_edit_screen.dart';
 
 class ProfileTab extends StatelessWidget {
@@ -71,6 +72,10 @@ class ProfileTab extends StatelessWidget {
         _MenuItem(icon: Icons.location_city_outlined, label: 'Grad', value: orDash(user?.cityName)),
         _MenuItem(icon: Icons.bloodtype_outlined, label: 'Krvna grupa', value: orDash(user?.bloodType)),
         _MenuItem(icon: Icons.warning_amber_rounded, label: 'Alergije', value: orDash(user?.allergies)),
+      ]),
+      const GroupLabel('Plaćanja'),
+      _Menu(children: [
+        _MenuItem(icon: Icons.receipt_long_outlined, label: 'Historija plaćanja', onTap: () => _push(context, const PaymentHistoryScreen())),
       ]),
       const GroupLabel('Sigurnost i obavještenja'),
       _Menu(children: [
