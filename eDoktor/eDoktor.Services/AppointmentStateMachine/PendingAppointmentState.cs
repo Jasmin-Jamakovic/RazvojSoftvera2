@@ -56,6 +56,9 @@ namespace eDoktor.Services.AppointmentStateMachine
             return Map(a);
         }
 
+        public override async Task<AppointmentResponse> RescheduleAsync(int id, int newTimeSlotId, string reason)
+            => Map(await MoveToSlotAsync(id, newTimeSlotId, reason));
+
         private Task<Database.Entities.Appointment?> Load(int id) =>
             _context.Appointments
                 .Include(x => x.Patient)

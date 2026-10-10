@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/entities.dart';
 import '../providers/providers.dart';
+import '../widgets/reschedule_dialog.dart';
 
 class AppointmentsScreen extends StatefulWidget {
   const AppointmentsScreen({super.key});
@@ -29,6 +30,17 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
       ],
     ));
     return ok ?? false;
+  }
+
+  Future<void> _reschedule(Appointment a) async {
+    final result = await showDialog<({TimeSlot slot, String reason})>(context: context, builder: (_) => RescheduleDialog(appointment: a));
+    if (result == null || !mounted) return;
+    final m = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppointmentProvider>().reschedule(a.id, newTimeSlotId: result.slot.id, reason: result.reason);
+      m.showSnackBar(SnackBar(content: Text('Termin je pomjeren na ${DateFormat('dd.MM.yyyy HH:mm').format(result.slot.start)}. Pacijent je obaviješten.')));
+      _refresh();
+    } catch (e) { m.showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
   @override
@@ -62,6 +74,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
             trailing: Wrap(spacing: 6, children: [
               if (a.status == 'Pending') TextButton(onPressed: () async { try { await context.read<AppointmentProvider>().confirm(a.id); _refresh(); } catch(e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); } }, child: const Text('Potvrdi')),
               if (a.status == 'Confirmed') TextButton(onPressed: () async { try { await context.read<AppointmentProvider>().complete(a.id); _refresh(); } catch(e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); } }, child: const Text('Završi')),
+              if (a.status == 'Pending' || a.status == 'Confirmed') Tooltip(
+                message: a.startUtc.isAfter(DateTime.now()) ? 'Pomjeri na drugi slobodan termin' : 'Termin koji je već počeo ne može biti pomjeren.',
+                child: TextButton(onPressed: a.startUtc.isAfter(DateTime.now()) ? () => _reschedule(a) : null, child: const Text('Pomjeri')),
+              ),
               if (a.status != 'Completed' && a.status != 'Cancelled') TextButton(onPressed: () async {
                 if (!await _confirm('Otkazivanje termina', 'Otkazati termin za ${a.patientName ?? ""}? Ova akcija je nepovratna.')) return;
                 final m = ScaffoldMessenger.of(context);

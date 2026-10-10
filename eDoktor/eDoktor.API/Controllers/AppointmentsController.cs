@@ -53,6 +53,9 @@ namespace eDoktor.API.Controllers
         [HttpPost("{id}/complete"), Authorize(Roles = Roles.AdminOrDoctor)]
         public Task<AppointmentResponse> Complete(int id) => _appts.CompleteAsync(id);
 
+        [HttpPost("{id}/reschedule"), Authorize(Roles = Roles.Admin)]
+        public Task<AppointmentResponse> Reschedule(int id, AppointmentRescheduleRequest req) => _appts.RescheduleAsync(id, req);
+
         [HttpPost("{id}/cancel")]
         public async Task<AppointmentResponse> Cancel(int id, AppointmentStatusChangeRequest req)
         {

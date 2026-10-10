@@ -13,5 +13,6 @@ namespace eDoktor.Services.Appointments
         Task<AppointmentResponse> ConfirmAsync(int id);
         Task<AppointmentResponse> CompleteAsync(int id);
         Task<AppointmentResponse> CancelAsync(int id, AppointmentStatusChangeRequest req);
+        Task<AppointmentResponse> RescheduleAsync(int id, AppointmentRescheduleRequest req);
     }
 }

@@ -85,6 +85,14 @@ namespace eDoktor.Services.Appointments
             return await state.CancelAsync(id, req.Reason);
         }
 
+        public async Task<AppointmentResponse> RescheduleAsync(int id, AppointmentRescheduleRequest req)
+        {
+            var name = await _db.Appointments.Where(a => a.Id == id).Select(a => a.StateMachine).FirstOrDefaultAsync()
+                ?? throw new NotFoundException("Termin nije pronađen.");
+            var state = _sp.GetRequiredService<InitialAppointmentState>().GetState(name);
+            return await state.RescheduleAsync(id, req.NewTimeSlotId, req.Reason.Trim());
+        }
+
         private AppointmentResponse Map(Database.Entities.Appointment a) => new()
         {
             Id = a.Id,

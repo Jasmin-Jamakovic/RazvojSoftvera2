@@ -37,6 +37,7 @@ namespace eDoktor.Worker
                 EmailKind.AppointmentReminder => Template($"Pozdrav {email.FirstName}", "Podsjetnik na predstojeći termin.", email.Body),
                 EmailKind.PaymentReceipt => Template($"Pozdrav {email.FirstName}", "Hvala na uplati putem PayPala.", email.Body),
                 EmailKind.PrescriptionIssued => Template($"Pozdrav {email.FirstName}", "Izdat vam je novi e-recept.", email.Body),
+                EmailKind.AppointmentRescheduled => Template($"Pozdrav {email.FirstName}", "Vaš termin je pomjeren.", email.Body),
                 _ => Template($"Pozdrav {email.FirstName}", "Dobrodošli na eDoktor.", "Vaš nalog je spreman, slobodno se prijavite u aplikaciju i odaberite svog ljekara.")
             };
             msg.Body = new TextPart("html") { Text = htmlBody };

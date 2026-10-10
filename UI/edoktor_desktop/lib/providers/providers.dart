@@ -99,6 +99,19 @@ class AppointmentProvider extends ChangeNotifier {
   Future<void> confirm(int id) => ApiClient.post('/api/appointments/$id/confirm');
   Future<void> complete(int id) => ApiClient.post('/api/appointments/$id/complete');
   Future<void> cancel(int id, {String? reason}) => ApiClient.post('/api/appointments/$id/cancel', {'reason': reason});
+  Future<void> reschedule(int id, {required int newTimeSlotId, required String reason}) =>
+      ApiClient.post('/api/appointments/$id/reschedule', {'newTimeSlotId': newTimeSlotId, 'reason': reason});
+
+  /// Free future slots of [doctorId] on the given local calendar day.
+  Future<List<TimeSlot>> freeSlots(int doctorId, DateTime day) async {
+    final from = DateTime(day.year, day.month, day.day);
+    final to = from.add(const Duration(days: 1));
+    final res = await ApiClient.get('/api/time-slots', query: {
+      'doctorId': doctorId, 'onlyAvailable': true,
+      'from': from.toUtc().toIso8601String(), 'to': to.toUtc().toIso8601String(),
+    });
+    return (res as List? ?? []).map((e) => TimeSlot.fromJson(e)).toList();
+  }
 }
 
 class PaymentProvider extends ChangeNotifier {

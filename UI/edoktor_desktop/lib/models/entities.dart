@@ -51,6 +51,14 @@ class Appointment {
         payment: j['payment'] as Map<String, dynamic>?);
 }
 
+class TimeSlot {
+  final int id;
+  final DateTime start, end;
+  TimeSlot({required this.id, required this.start, required this.end});
+  factory TimeSlot.fromJson(Map<String, dynamic> j) => TimeSlot(
+        id: j['id'], start: DateTime.parse(j['startUtc']).toLocal(), end: DateTime.parse(j['endUtc']).toLocal());
+}
+
 class Payment {
   final int id, appointmentId;
   final String? captureId;
