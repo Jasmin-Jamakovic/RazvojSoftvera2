@@ -4,7 +4,10 @@ using eDoktor.Model;
 using eDoktor.Model.Messages;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
+using eDoktor.Services.Appointments;
+using eDoktor.Services.Auth;
 using eDoktor.Services.Database;
+using eDoktor.Services.Database.Entities;
 using eDoktor.Services.Notifications;
 using eDoktor.Services.RabbitMQ;
 using MapsterMapper;
@@ -26,6 +29,37 @@ namespace eDoktor.Services.AppointmentStateMachine
             _context = context;
         }
 
+        protected Task<Appointment> LoadAsync(int id) => LoadOrThrowAsync(id);
+
+        private async Task<Appointment> LoadOrThrowAsync(int id) =>
+            await _context.Appointments.WithDetails().FirstOrDefaultAsync(x => x.Id == id)
+            ?? throw new NotFoundException("Termin nije pronađen.");
+
+        protected AppointmentResponse Map(Appointment a) => a.ToResponse(_mapper);
+
+        /// Maps after a transition, loading the audit users that were just assigned so their names are returned.
+        protected async Task<AppointmentResponse> MapAfterChangeAsync(Appointment a)
+        {
+            var entry = _context.Entry(a);
+            await entry.Reference(x => x.ConfirmedBy).LoadAsync();
+            await entry.Reference(x => x.CompletedBy).LoadAsync();
+            await entry.Reference(x => x.CancelledBy).LoadAsync();
+            await entry.Reference(x => x.RescheduledBy).LoadAsync();
+            return Map(a);
+        }
+
+        /// The signed-in user performing the transition (for the audit trail).
+        protected Task<int?> ActingUserIdAsync() => _serviceProvider.GetRequiredService<ICurrentUserService>().GetUserIdAsync();
+
+        /// Staff (admin/doctor) performing the transition; null when it happens on the patient's behalf
+        /// (e.g. the automatic confirmation after a PayPal payment).
+        protected async Task<int?> ActingStaffIdAsync()
+        {
+            var current = _serviceProvider.GetRequiredService<ICurrentUserService>();
+            var role = await current.GetUserRoleAsync();
+            return role == Roles.Admin || role == Roles.Doctor ? await current.GetUserIdAsync() : null;
+        }
+
         public virtual Task<AppointmentResponse> CreateAsync(AppointmentCreateRequest req, int patientId)
             => throw new UserException("Cannot create from current state");
 
@@ -43,16 +77,9 @@ namespace eDoktor.Services.AppointmentStateMachine
 
         /// Moves an active (Pending/Confirmed) appointment to another free slot of the same doctor.
         /// The status is kept; only the slot changes. Old slot is released, new one booked atomically.
-        protected async Task<Database.Entities.Appointment> MoveToSlotAsync(int id, int newTimeSlotId, string reason)
+        protected async Task<Appointment> MoveToSlotAsync(int id, int newTimeSlotId, string reason)
         {
-            var a = await _context.Appointments
-                .Include(x => x.Patient)
-                .Include(x => x.Doctor).ThenInclude(d => d.User)
-                .Include(x => x.TimeSlot)
-                .Include(x => x.Payment)
-                .Include(x => x.VideoCallSession)
-                .FirstOrDefaultAsync(x => x.Id == id)
-                ?? throw new NotFoundException("Termin nije pronađen.");
+            var a = await LoadAsync(id);
 
             if (a.TimeSlot.StartUtc <= DateTime.UtcNow)
                 throw new UserException("Termin koji je već počeo ili prošao ne može biti pomjeren.");
@@ -76,6 +103,9 @@ namespace eDoktor.Services.AppointmentStateMachine
             newSlot.IsBooked = true;
             a.TimeSlotId = newSlot.Id;
             a.TimeSlot = newSlot;
+            a.RescheduledAt = DateTime.UtcNow;
+            a.RescheduledById = await ActingUserIdAsync();
+            a.RescheduleReason = reason;
             await _context.SaveChangesAsync();
 
             var doctorName = $"{a.Doctor.User.FirstName} {a.Doctor.User.LastName}";

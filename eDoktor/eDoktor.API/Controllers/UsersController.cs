@@ -3,7 +3,6 @@ using eDoktor.Model;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
 using eDoktor.Model.SearchObjects;
-using eDoktor.Services.Auth;
 using eDoktor.Services.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,8 +13,7 @@ namespace eDoktor.API.Controllers
     public class UsersController : ControllerBase
     {
         private readonly IUserService _users;
-        private readonly ICurrentUserService _current;
-        public UsersController(IUserService users, ICurrentUserService current) { _users = users; _current = current; }
+        public UsersController(IUserService users) { _users = users; }
 
         [HttpGet, Authorize(Roles = Roles.Admin)]
         public Task<PagedResult<UserResponse>> Get([FromQuery] UserSearchObject s) => _users.GetAsync(s ?? new());
@@ -27,25 +25,13 @@ namespace eDoktor.API.Controllers
         [HttpGet("{id}/photo")]
         public async Task<IActionResult> Photo(int id)
         {
-            var me = await _current.GetUserIdAsync();
-            var role = await _current.GetUserRoleAsync();
-            if (role != Roles.Admin && me != id)
-                throw new ForbiddenException("You can only view your own photo.");
-
-            var u = await _users.GetByIdAsync(id);
-            if (u?.Image == null || u.Image.Length == 0) return NotFound();
-            return File(u.Image, ImageValidation.DetectContentType(u.Image) ?? "application/octet-stream");
+            var photo = await _users.GetPhotoAsync(id);
+            return photo == null ? NotFound() : File(photo.Value.Bytes, photo.Value.ContentType);
         }
 
+        // Owner-or-admin is enforced in the service.
         [HttpPut("{id}")]
-        public async Task<UserResponse> Update(int id, UserUpdateRequest req)
-        {
-            var me = await _current.GetUserIdAsync();
-            var role = await _current.GetUserRoleAsync();
-            if (role != Roles.Admin && me != id)
-                throw new ForbiddenException("You can only edit your own profile.");
-            return await _users.UpdateAsync(id, req);
-        }
+        public Task<UserResponse> Update(int id, UserUpdateRequest req) => _users.UpdateAsync(id, req);
 
         [HttpDelete("{id}"), Authorize(Roles = Roles.Admin)]
         public Task<bool> Delete(int id) => _users.SoftDeleteAsync(id);

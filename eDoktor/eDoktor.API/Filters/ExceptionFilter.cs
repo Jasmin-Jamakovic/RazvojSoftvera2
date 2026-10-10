@@ -1,16 +1,8 @@
 using eDoktor.Model;
-using eDoktor.Model.Requests;
-using eDoktor.Services;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Security.Claims;
-using System.Text;
-using System.Text.Encodings.Web;
 
 namespace eDoktor.API.Filters
 {

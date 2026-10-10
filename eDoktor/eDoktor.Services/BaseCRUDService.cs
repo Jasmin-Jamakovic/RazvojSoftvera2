@@ -14,10 +14,8 @@ namespace eDoktor.Services
 {
     public abstract class BaseCRUDService<T, TSearch, TEntity, TInsert, TUpdate> : BaseService<T, TSearch, TEntity>, ICRUDService<T, TSearch, TInsert, TUpdate> where T : class where TSearch : BaseSearchObject where TEntity : class, new() where TInsert : class where TUpdate : class
     {
-        protected readonly eDoktorDbContext _context;
         public BaseCRUDService(eDoktorDbContext context, IMapper mapper): base(context, mapper)
         {
-            _context = context;
         }
 
         public virtual async Task<T> CreateAsync(TInsert request){
@@ -25,8 +23,6 @@ namespace eDoktor.Services
             var entity = new TEntity();
             MapInsertToEntity(entity, request);
             _context.Set<TEntity>().Add(entity);
-
-            await BeforeInsert(entity, request);
 
             await _context.SaveChangesAsync();
             return MapToResponse(entity);
@@ -36,17 +32,12 @@ namespace eDoktor.Services
             return _mapper.Map(request, entity);
         }
 
-        protected virtual async Task BeforeInsert(TEntity entity, TInsert request){
-            
-        }
-
         public virtual async Task<T> UpdateAsync(int id, TUpdate request){
             var entity = await _context.Set<TEntity>().FindAsync(id);
             if (entity == null){
                 throw new NotFoundException("Entity not found");
             }
 
-            await BeforeUpdate(entity, request);
             MapUpdateToEntity(entity, request);
 
             await _context.SaveChangesAsync();
@@ -57,17 +48,11 @@ namespace eDoktor.Services
             _mapper.Map(request, entity);
         }
 
-        protected virtual async Task BeforeUpdate(TEntity entity, TUpdate request){
-            
-        }
-
         public virtual async Task<bool> DeleteAsync(int id){
             var entity = await _context.Set<TEntity>().FindAsync(id);
             if (entity == null){
                 return false;
             }
-
-            await BeforeDelete(entity);
 
             _context.Set<TEntity>().Remove(entity);
             try
@@ -81,10 +66,6 @@ namespace eDoktor.Services
                 throw new UserException("Zapis se ne može obrisati jer se koristi u drugim podacima.");
             }
             return true;
-        }
-
-        protected virtual async Task BeforeDelete(TEntity entity){
-
         }
 
         public virtual async Task<bool> SoftDeleteAsync(int id)

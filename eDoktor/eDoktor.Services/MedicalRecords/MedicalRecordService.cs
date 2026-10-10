@@ -4,6 +4,7 @@ using eDoktor.Model;
 using eDoktor.Model.Messages;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
+using eDoktor.Services.Auth;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
 using eDoktor.Services.RabbitMQ;
@@ -15,10 +16,29 @@ namespace eDoktor.Services.MedicalRecords
     {
         private readonly eDoktorDbContext _db;
         private readonly IRabbitMQService _rabbit;
-        public MedicalRecordService(eDoktorDbContext db, IRabbitMQService rabbit) { _db = db; _rabbit = rabbit; }
+        private readonly ICurrentUserService _current;
+        public MedicalRecordService(eDoktorDbContext db, IRabbitMQService rabbit, ICurrentUserService current)
+        { _db = db; _rabbit = rabbit; _current = current; }
+
+        // A patient sees only their own record; a doctor only records of patients they have (had) an
+        // appointment with; an admin sees all.
+        private async Task EnsureCanAccessPatientAsync(int patientId)
+        {
+            var role = await _current.GetUserRoleAsync();
+            var uid = await _current.GetUserIdAsync();
+            var allowed = role switch
+            {
+                Roles.Admin => true,
+                Roles.Patient => uid == patientId,
+                Roles.Doctor => await _db.Appointments.AnyAsync(a => a.PatientId == patientId && a.Doctor.UserId == uid),
+                _ => false
+            };
+            if (!allowed) throw new ForbiddenException("Nemate pristup kartonu ovog pacijenta.");
+        }
 
         public async Task<MedicalRecordResponse?> GetForPatientAsync(int patientId)
         {
+            await EnsureCanAccessPatientAsync(patientId);
             var record = await _db.MedicalRecords
                 .Include(r => r.Patient)
                 .Include(r => r.Entries).ThenInclude(e => e.Appointment).ThenInclude(a => a.Doctor).ThenInclude(d => d.User)
@@ -67,7 +87,7 @@ namespace eDoktor.Services.MedicalRecords
                     .OrderByDescending(l => l.CreatedAt)
                     .Select(l => new LabResultResponse
                     {
-                        Id = l.Id, MedicalRecordId = l.MedicalRecordId, Title = l.Title, Notes = l.Notes, FileUrl = l.FileUrl, CreatedAt = l.CreatedAt
+                        Id = l.Id, MedicalRecordId = l.MedicalRecordId, Title = l.Title, Notes = l.Notes, CreatedAt = l.CreatedAt
                     }).ToList(),
                 Prescriptions = record.Entries
                     .Where(e => e.Prescription != null)
@@ -89,8 +109,8 @@ namespace eDoktor.Services.MedicalRecords
         public async Task<MedicalRecordEntryResponse> AddEntryAsync(MedicalRecordEntryUpsertRequest req, int doctorUserId)
         {
             var appt = await _db.Appointments.Include(a => a.Doctor).FirstOrDefaultAsync(a => a.Id == req.AppointmentId)
-                ?? throw new UserException("Appointment not found");
-            if (appt.Doctor.UserId != doctorUserId) throw new UserException("Only the treating doctor can add an entry");
+                ?? throw new NotFoundException("Termin nije pronađen.");
+            if (appt.Doctor.UserId != doctorUserId) throw new ForbiddenException("Samo ljekar ovog pregleda može upisati nalaz u karton.");
 
             var record = await _db.MedicalRecords.FirstOrDefaultAsync(r => r.PatientId == appt.PatientId);
             if (record == null)
@@ -124,9 +144,9 @@ namespace eDoktor.Services.MedicalRecords
                 .Include(e => e.Appointment).ThenInclude(a => a.Doctor).ThenInclude(d => d.User)
                 .Include(e => e.Appointment).ThenInclude(a => a.Patient)
                 .FirstOrDefaultAsync(e => e.Id == req.MedicalRecordEntryId)
-                ?? throw new UserException("Record entry not found");
+                ?? throw new NotFoundException("Unos u kartonu nije pronađen.");
 
-            if (entry.Appointment.Doctor.UserId != doctorUserId) throw new UserException("Only the treating doctor may issue this prescription");
+            if (entry.Appointment.Doctor.UserId != doctorUserId) throw new ForbiddenException("Samo ljekar ovog pregleda može izdati recept.");
 
             var existing = await _db.Prescriptions.FirstOrDefaultAsync(p => p.MedicalRecordEntryId == entry.Id);
             if (existing != null) throw new UserException("Prescription already issued for this record entry");
@@ -167,6 +187,9 @@ namespace eDoktor.Services.MedicalRecords
 
         public async Task<LabResultResponse> AddLabResultAsync(LabResultUpsertRequest req)
         {
+            if (!await _db.Users.AnyAsync(u => u.Id == req.PatientId && u.Role.Name == Roles.Patient))
+                throw new NotFoundException("Pacijent nije pronađen.");
+            await EnsureCanAccessPatientAsync(req.PatientId);
             var record = await _db.MedicalRecords.FirstOrDefaultAsync(r => r.PatientId == req.PatientId);
             if (record == null)
             {
@@ -174,13 +197,13 @@ namespace eDoktor.Services.MedicalRecords
                 _db.MedicalRecords.Add(record);
                 await _db.SaveChangesAsync();
             }
-            var l = new LabResult { MedicalRecordId = record.Id, Title = req.Title, Notes = req.Notes, FileUrl = req.FileUrl };
+            var l = new LabResult { MedicalRecordId = record.Id, Title = req.Title, Notes = req.Notes };
             _db.LabResults.Add(l);
             await _db.SaveChangesAsync();
 
             return new LabResultResponse
             {
-                Id = l.Id, MedicalRecordId = l.MedicalRecordId, Title = l.Title, Notes = l.Notes, FileUrl = l.FileUrl, CreatedAt = l.CreatedAt
+                Id = l.Id, MedicalRecordId = l.MedicalRecordId, Title = l.Title, Notes = l.Notes, CreatedAt = l.CreatedAt
             };
         }
     }

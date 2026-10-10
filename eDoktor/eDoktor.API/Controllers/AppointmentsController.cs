@@ -19,28 +19,14 @@ namespace eDoktor.API.Controllers
         public AppointmentsController(IAppointmentService appts, ICurrentUserService current)
         { _appts = appts; _current = current; }
 
+        // Access rules (own appointments for patients and doctors) are enforced in the service.
         [HttpGet]
-        public async Task<PagedResult<AppointmentResponse>> Get([FromQuery] AppointmentSearchObject s)
-        {
-            var role = await _current.GetUserRoleAsync();
-            var uid = await _current.GetUserIdAsync();
-            if (role == Roles.Patient && uid.HasValue) s.PatientId = uid.Value;
-            return await _appts.GetAsync(s ?? new());
-        }
+        public Task<PagedResult<AppointmentResponse>> Get([FromQuery] AppointmentSearchObject s) => _appts.GetAsync(s);
 
         [HttpGet("{id}")]
-        public async Task<AppointmentResponse?> GetById(int id)
-        {
-            var appt = await _appts.GetByIdAsync(id)
-                ?? throw new NotFoundException("Appointment not found");
-            var role = await _current.GetUserRoleAsync();
-            var uid = await _current.GetUserIdAsync();
-            if (role == Roles.Patient && appt.PatientId != uid)
-                throw new ForbiddenException("You can only view your own appointments.");
-            return appt;
-        }
+        public Task<AppointmentResponse> GetById(int id) => _appts.GetByIdAsync(id);
 
-        [HttpPost]
+        [HttpPost, Authorize(Roles = Roles.Patient)]
         public async Task<AppointmentResponse> Create(AppointmentCreateRequest req)
         {
             var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
@@ -57,18 +43,6 @@ namespace eDoktor.API.Controllers
         public Task<AppointmentResponse> Reschedule(int id, AppointmentRescheduleRequest req) => _appts.RescheduleAsync(id, req);
 
         [HttpPost("{id}/cancel")]
-        public async Task<AppointmentResponse> Cancel(int id, AppointmentStatusChangeRequest req)
-        {
-            var role = await _current.GetUserRoleAsync();
-            var uid = await _current.GetUserIdAsync();
-            if (role == Roles.Patient)
-            {
-                var appt = await _appts.GetByIdAsync(id)
-                    ?? throw new NotFoundException("Appointment not found");
-                if (appt.PatientId != uid)
-                    throw new ForbiddenException("You can only cancel your own appointments.");
-            }
-            return await _appts.CancelAsync(id, req);
-        }
+        public Task<AppointmentResponse> Cancel(int id, AppointmentStatusChangeRequest req) => _appts.CancelAsync(id, req);
     }
 }

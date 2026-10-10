@@ -237,6 +237,16 @@ namespace eDoktor.Services.Database
                 CancellationReason = "Pacijent spriječen, traži novi termin."
             };
 
+            // Audit trail of the seeded appointments: paid ones were confirmed automatically by the payment,
+            // completed ones were closed by their doctor, apt6 was cancelled by the patient.
+            foreach (var a in new[] { apt1, apt2, apt3, apt4, apt6 }) a.ConfirmedAt = a.CreatedAt.AddMinutes(5);
+            foreach (var a in new[] { apt1, apt2, apt3 })
+            {
+                a.CompletedAt = a.TimeSlot.EndUtc;
+                a.CompletedBy = users.First(u => u.Id == a.Doctor.UserId);
+            }
+            apt6.CancelledBy = patient2;
+
             db.Appointments.AddRange(apt1, apt2, apt3, apt4, apt5, apt6);
             db.MedicalRecordEntries.AddRange(entry1, entry2, entry3);
             db.Reviews.AddRange(review1, review2, review3);

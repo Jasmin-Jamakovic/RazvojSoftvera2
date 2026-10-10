@@ -6,7 +6,6 @@ namespace eDoktor.Model.Requests
     {
         [Required] public int PatientId { get; set; }
         [Required, MaxLength(200)] public string Title { get; set; } = string.Empty;
-        public string? Notes { get; set; }
-        public string? FileUrl { get; set; }
+        [MaxLength(2000)] public string? Notes { get; set; }
     }
 }

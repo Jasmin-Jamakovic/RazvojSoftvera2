@@ -134,6 +134,12 @@ namespace eDoktor.Services.Database
                 .HasForeignKey(a => a.TimeSlotId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Audit "who" columns: plain references, never cascading.
+            modelBuilder.Entity<Appointment>().HasOne(a => a.ConfirmedBy).WithMany().HasForeignKey(a => a.ConfirmedById).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<Appointment>().HasOne(a => a.CompletedBy).WithMany().HasForeignKey(a => a.CompletedById).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<Appointment>().HasOne(a => a.CancelledBy).WithMany().HasForeignKey(a => a.CancelledById).OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<Appointment>().HasOne(a => a.RescheduledBy).WithMany().HasForeignKey(a => a.RescheduledById).OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<Appointment>()
                 .HasOne(a => a.Payment)
                 .WithOne()

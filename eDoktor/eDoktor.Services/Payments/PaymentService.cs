@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,7 +7,6 @@ using eDoktor.Model.Messages;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
 using eDoktor.Model.SearchObjects;
-using eDoktor.Services.Appointments;
 using eDoktor.Services.AppointmentStateMachine;
 using eDoktor.Services.Auth;
 using eDoktor.Services.Database;
@@ -16,6 +16,7 @@ using eDoktor.Services.PayPal;
 using eDoktor.Services.RabbitMQ;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 
 namespace eDoktor.Services.Payments
@@ -29,13 +30,13 @@ namespace eDoktor.Services.Payments
         private readonly IRabbitMQService _rabbit;
         private readonly INotificationService _notifications;
         private readonly ICurrentUserService _current;
-        private readonly IAppointmentService _appointments;
+        private readonly IServiceProvider _sp;
         private readonly IMapper _mapper;
         private readonly PayPalOptions _paypalOptions;
 
         public PaymentService(eDoktorDbContext db, IPayPalService paypal, IRabbitMQService rabbit,
             INotificationService notifications, ICurrentUserService current,
-            IAppointmentService appointments, IMapper mapper, PayPalOptions paypalOptions)
+            IServiceProvider sp, IMapper mapper, PayPalOptions paypalOptions)
         {
             _paypalOptions = paypalOptions;
             _db = db;
@@ -43,7 +44,7 @@ namespace eDoktor.Services.Payments
             _rabbit = rabbit;
             _notifications = notifications;
             _current = current;
-            _appointments = appointments;
+            _sp = sp;
             _mapper = mapper;
         }
 
@@ -219,7 +220,7 @@ namespace eDoktor.Services.Payments
             {
                 // Confirm through the state machine (Pending -> Confirmed), not a direct column write.
                 if (appt.StateMachine == nameof(PendingAppointmentState))
-                    await _appointments.ConfirmAsync(appt.Id);
+                    await _sp.GetRequiredService<InitialAppointmentState>().GetState(appt.StateMachine).ConfirmAsync(appt.Id);
 
                 await _rabbit.PublishAsync(QueueNames.PaymentCaptured, new PaymentCapturedMessage
                 {

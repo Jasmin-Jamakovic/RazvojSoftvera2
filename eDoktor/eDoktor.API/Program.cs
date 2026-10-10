@@ -167,7 +167,6 @@ builder.Services.AddScoped<IVideoCallService, VideoCallService>();
 builder.Services.AddScoped<IConsultationChatService, ConsultationChatService>();
 
 // Appointment state machine
-builder.Services.AddScoped<BaseAppointmentState>();
 builder.Services.AddScoped<InitialAppointmentState>();
 builder.Services.AddScoped<PendingAppointmentState>();
 builder.Services.AddScoped<ConfirmedAppointmentState>();

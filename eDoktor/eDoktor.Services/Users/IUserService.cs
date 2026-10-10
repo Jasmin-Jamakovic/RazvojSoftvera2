@@ -10,6 +10,7 @@ namespace eDoktor.Services.Users
         Task<PagedResult<UserResponse>> GetAsync(UserSearchObject search);
         Task<UserResponse?> GetByIdAsync(int id);
         Task<UserResponse> UpdateAsync(int id, UserUpdateRequest req);
+        Task<(byte[] Bytes, string ContentType)?> GetPhotoAsync(int id);
         Task<bool> SoftDeleteAsync(int id);
 
         Task<LoginResponse> LoginAsync(LoginRequest req);

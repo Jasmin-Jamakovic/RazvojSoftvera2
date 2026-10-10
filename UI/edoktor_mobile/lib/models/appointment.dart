@@ -13,6 +13,8 @@ class Appointment {
   final Map<String, dynamic>? payment;
   final bool isPaid;
   final int? reviewRating;
+  final String? cancellationReason;
+  final String? rescheduleReason;
 
   Appointment({
     required this.id, required this.patientId, this.patientName,
@@ -20,6 +22,7 @@ class Appointment {
     required this.startUtc, required this.endUtc,
     required this.type, required this.status, required this.price,
     this.videoRoomId, this.payment, this.isPaid = false, this.reviewRating,
+    this.cancellationReason, this.rescheduleReason,
   });
 
   bool get isOnline => type == 1;
@@ -41,5 +44,7 @@ class Appointment {
         payment: j['payment'] as Map<String, dynamic>?,
         isPaid: j['isPaid'] ?? false,
         reviewRating: j['reviewRating'],
+        cancellationReason: j['cancellationReason'],
+        rescheduleReason: j['rescheduleReason'],
       );
 }

@@ -250,6 +250,16 @@ class _AppointmentCard extends StatelessWidget {
                     bg: featured ? Colors.white.withValues(alpha: 0.16) : AppColors.tint),
             ]),
           ),
+        if (a.status == 'Cancelled' && (a.cancellationReason?.isNotEmpty ?? false))
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text('Razlog otkazivanja: ${a.cancellationReason}', style: TextStyle(fontSize: 12.5, color: sub)),
+          ),
+        if (a.rescheduleReason != null && (a.status == 'Pending' || a.status == 'Confirmed'))
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text('Termin je pomjeren: ${a.rescheduleReason}', style: TextStyle(fontSize: 12.5, color: sub)),
+          ),
         if (actions.isNotEmpty) ...[
           const SizedBox(height: 12),
           Divider(height: 1, color: featured ? Colors.white24 : AppColors.line),

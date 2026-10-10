@@ -38,10 +38,33 @@ namespace eDoktor.Services.Database.Entities
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        // Audit trail: who changed the status, when, and why. A null "By" on a confirmation means it
+        // happened automatically after a successful PayPal payment.
+        public DateTime? ConfirmedAt { get; set; }
+        public int? ConfirmedById { get; set; }
+        [ForeignKey(nameof(ConfirmedById))]
+        public virtual User? ConfirmedBy { get; set; }
+
+        public DateTime? CompletedAt { get; set; }
+        public int? CompletedById { get; set; }
+        [ForeignKey(nameof(CompletedById))]
+        public virtual User? CompletedBy { get; set; }
+
         public DateTime? CancelledAt { get; set; }
+        public int? CancelledById { get; set; }
+        [ForeignKey(nameof(CancelledById))]
+        public virtual User? CancelledBy { get; set; }
 
         [MaxLength(500)]
         public string? CancellationReason { get; set; }
+
+        public DateTime? RescheduledAt { get; set; }
+        public int? RescheduledById { get; set; }
+        [ForeignKey(nameof(RescheduledById))]
+        public virtual User? RescheduledBy { get; set; }
+
+        [MaxLength(500)]
+        public string? RescheduleReason { get; set; }
 
         public int? PayPalPaymentId { get; set; }
         [ForeignKey(nameof(PayPalPaymentId))]

@@ -138,10 +138,6 @@ class PatientProvider extends ChangeNotifier {
 }
 
 class AppointmentProvider extends ChangeNotifier {
-  Future<List<Appointment>> list({String? status, int? doctorId}) async {
-    final res = await ApiClient.get('/api/appointments', query: {'status': status, 'doctorId': doctorId, 'pageSize': 200});
-    return (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
-  }
   /// Every appointment matching the filters, fetched page by page (the API caps a page at 100).
   Future<List<Appointment>> listAll({String? status, DateTime? from, DateTime? to}) async {
     const pageSize = 100;

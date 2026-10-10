@@ -19,9 +19,6 @@ namespace eDoktor.Services.Database.Entities
         [MaxLength(4000)]
         public string? Notes { get; set; }
 
-        [MaxLength(500)]
-        public string? FileUrl { get; set; }
-
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

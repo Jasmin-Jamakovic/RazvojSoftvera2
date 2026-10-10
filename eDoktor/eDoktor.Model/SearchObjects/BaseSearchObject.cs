@@ -11,8 +11,6 @@ namespace eDoktor.Model.SearchObjects
 
         public int? Page { get; set; }
         public int? PageSize { get; set; }
-        public string? OrderBy { get; set; }
-        public string? SortDirection { get; set; }
         public bool IncludeTotalCount { get; set; } = true;
         public bool IncludeDeleted { get; set; } = false;
 

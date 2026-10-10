@@ -19,13 +19,30 @@ namespace eDoktor.Services.Users
         private readonly IPasswordHasher _hasher;
         private readonly IJwtTokenService _jwt;
         private readonly IRabbitMQService _rabbit;
+        private readonly ICurrentUserService _current;
 
-        public UserService(eDoktorDbContext db, IPasswordHasher hasher, IJwtTokenService jwt, IRabbitMQService rabbit)
+        public UserService(eDoktorDbContext db, IPasswordHasher hasher, IJwtTokenService jwt, IRabbitMQService rabbit, ICurrentUserService current)
         {
             _db = db;
             _hasher = hasher;
             _jwt = jwt;
             _rabbit = rabbit;
+            _current = current;
+        }
+
+        // A user may read/change only their own profile; an admin may do so for anyone.
+        private async Task EnsureSelfOrAdminAsync(int userId, string message)
+        {
+            if (await _current.GetUserRoleAsync() == Roles.Admin) return;
+            if (await _current.GetUserIdAsync() != userId) throw new ForbiddenException(message);
+        }
+
+        public async Task<(byte[] Bytes, string ContentType)?> GetPhotoAsync(int id)
+        {
+            await EnsureSelfOrAdminAsync(id, "Možete vidjeti samo vlastitu fotografiju.");
+            var image = await _db.Users.Where(u => u.Id == id && !u.IsDeleted).Select(u => u.Image).FirstOrDefaultAsync();
+            if (image == null || image.Length == 0) return null;
+            return (image, ImageValidation.DetectContentType(image) ?? "application/octet-stream");
         }
 
         public async Task<PagedResult<UserResponse>> GetAsync(UserSearchObject search)
@@ -57,6 +74,7 @@ namespace eDoktor.Services.Users
 
         public async Task<UserResponse> UpdateAsync(int id, UserUpdateRequest req)
         {
+            await EnsureSelfOrAdminAsync(id, "Možete uređivati samo vlastiti profil.");
             var u = await _db.Users.Include(x => x.Role).Include(x => x.City).FirstOrDefaultAsync(x => x.Id == id)
                 ?? throw new UserException("User not found");
             if (req.FirstName != null) u.FirstName = req.FirstName;

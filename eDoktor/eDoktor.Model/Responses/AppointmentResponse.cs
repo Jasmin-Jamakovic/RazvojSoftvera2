@@ -18,8 +18,17 @@ namespace eDoktor.Model.Responses
         public string Status { get; set; } = "Pending";
         public decimal Price { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
+        // Null while ConfirmedAt is set means "confirmed automatically after payment".
+        public string? ConfirmedByName { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public string? CompletedByName { get; set; }
         public DateTime? CancelledAt { get; set; }
+        public string? CancelledByName { get; set; }
         public string? CancellationReason { get; set; }
+        public DateTime? RescheduledAt { get; set; }
+        public string? RescheduledByName { get; set; }
+        public string? RescheduleReason { get; set; }
         public PaymentResponse? Payment { get; set; }
         // Explicit paid flag so the client can hide the pay button without inspecting payment internals.
         public bool IsPaid => Payment != null && Payment.Status == PaymentStatus.Captured;

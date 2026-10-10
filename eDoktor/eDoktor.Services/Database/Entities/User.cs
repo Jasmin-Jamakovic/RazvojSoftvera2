@@ -29,8 +29,6 @@ namespace eDoktor.Services.Database.Entities
         [Required]
         public string PasswordHash { get; set; } = string.Empty;
 
-        public string? PasswordSalt { get; set; }
-
         [Phone]
         public string? PhoneNumber { get; set; }
 

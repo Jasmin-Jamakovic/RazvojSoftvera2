@@ -41,7 +41,13 @@ class Appointment {
   final double price;
   final Map<String, dynamic>? payment;
   final String? cancellationReason;
-  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason});
+  // Audit trail
+  final DateTime createdAt;
+  final DateTime? confirmedAt, completedAt, cancelledAt, rescheduledAt;
+  final String? confirmedByName, completedByName, cancelledByName, rescheduledByName, rescheduleReason;
+  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason,
+      required this.createdAt, this.confirmedAt, this.completedAt, this.cancelledAt, this.rescheduledAt,
+      this.confirmedByName, this.completedByName, this.cancelledByName, this.rescheduledByName, this.rescheduleReason});
   bool get isOnline => type == 1;
   factory Appointment.fromJson(Map<String, dynamic> j) => Appointment(
         id: j['id'], patientId: j['patientId'], patientName: j['patientName'],
@@ -50,7 +56,19 @@ class Appointment {
         type: j['type'] ?? 0, status: j['status'] ?? 'Pending',
         price: (j['price'] ?? 0).toDouble(),
         payment: j['payment'] as Map<String, dynamic>?,
-        cancellationReason: j['cancellationReason']);
+        cancellationReason: j['cancellationReason'],
+        createdAt: DateTime.parse(j['createdAt']).toLocal(),
+        confirmedAt: _localOrNull(j['confirmedAt']),
+        completedAt: _localOrNull(j['completedAt']),
+        cancelledAt: _localOrNull(j['cancelledAt']),
+        rescheduledAt: _localOrNull(j['rescheduledAt']),
+        confirmedByName: j['confirmedByName'],
+        completedByName: j['completedByName'],
+        cancelledByName: j['cancelledByName'],
+        rescheduledByName: j['rescheduledByName'],
+        rescheduleReason: j['rescheduleReason']);
+
+  static DateTime? _localOrNull(dynamic v) => v == null ? null : DateTime.parse(v).toLocal();
 }
 
 class TimeSlot {

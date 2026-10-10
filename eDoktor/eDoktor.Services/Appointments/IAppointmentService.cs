@@ -8,7 +8,7 @@ namespace eDoktor.Services.Appointments
     public interface IAppointmentService
     {
         Task<PagedResult<AppointmentResponse>> GetAsync(AppointmentSearchObject search);
-        Task<AppointmentResponse?> GetByIdAsync(int id);
+        Task<AppointmentResponse> GetByIdAsync(int id);
         Task<AppointmentResponse> CreateAsync(AppointmentCreateRequest req, int patientId);
         Task<AppointmentResponse> ConfirmAsync(int id);
         Task<AppointmentResponse> CompleteAsync(int id);

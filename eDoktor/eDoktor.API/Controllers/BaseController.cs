@@ -33,30 +33,5 @@ namespace eDoktor.API.Controllers
         {
             return await _service.GetByIdAsync(id);
         }
-
-        // [HttpPost]
-        // public virtual async Task<ActionResult<T>> Create([FromBody] T request)
-        // {
-        //     var result = await _service.CreateAsync(request);
-        //     return Ok(result);
-        // }
-
-        // [HttpPut("{id}")]
-        // public virtual async Task<ActionResult<T>> Update(int id, [FromBody] T request)
-        // {
-        //     var result = await _service.UpdateAsync(id, request);
-        //     if (result == null)
-        //         return NotFound();
-        //     return Ok(result);
-        // }
-
-        // [HttpDelete("{id}")]
-        // public virtual async Task<ActionResult<bool>> Delete(int id)
-        // {
-        //     var result = await _service.DeleteAsync(id);
-        //     if (!result)
-        //         return NotFound();
-        //     return Ok(result);
-        // }
     }
 } 

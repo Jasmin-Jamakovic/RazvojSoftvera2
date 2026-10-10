@@ -67,38 +67,7 @@ namespace eDoktor.Services.AppointmentStateMachine
             await NotifyAsync(appt.PatientId, "Termin zakazan",
                 $"Vaš termin kod dr. {doctorUser?.FirstName} {doctorUser?.LastName} ({slot.StartUtc:dd.MM.yyyy. HH:mm}) je zakazan i čeka potvrdu.");
 
-            return await ToResponse(appt.Id);
-        }
-
-        private async Task<AppointmentResponse> ToResponse(int id)
-        {
-            var a = await _context.Appointments
-                .Include(x => x.Patient)
-                .Include(x => x.Doctor).ThenInclude(d => d.User)
-                .Include(x => x.TimeSlot)
-                .Include(x => x.Payment)
-                .Include(x => x.VideoCallSession)
-                .FirstAsync(x => x.Id == id);
-
-            return new AppointmentResponse
-            {
-                Id = a.Id,
-                PatientId = a.PatientId,
-                PatientName = $"{a.Patient.FirstName} {a.Patient.LastName}",
-                DoctorId = a.DoctorId,
-                DoctorName = $"{a.Doctor.User.FirstName} {a.Doctor.User.LastName}",
-                TimeSlotId = a.TimeSlotId,
-                StartUtc = a.TimeSlot.StartUtc,
-                EndUtc = a.TimeSlot.EndUtc,
-                Type = (int)a.Type,
-                Status = a.StateMachine.Replace("AppointmentState", string.Empty),
-                Price = a.Price,
-                CreatedAt = a.CreatedAt,
-                CancelledAt = a.CancelledAt,
-                CancellationReason = a.CancellationReason,
-                Payment = a.Payment == null ? null : _mapper.Map<PaymentResponse>(a.Payment),
-                VideoRoomId = a.VideoCallSession?.RoomId
-            };
+            return Map(await LoadAsync(appt.Id));
         }
     }
 }

@@ -222,8 +222,7 @@ namespace eDoktor.Services.Doctors
         private static string GenerateTempPassword()
         {
             const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-            var rand = new Random();
-            return new string(Enumerable.Range(0, 10).Select(_ => chars[rand.Next(chars.Length)]).ToArray());
+            return System.Security.Cryptography.RandomNumberGenerator.GetString(chars, 10);
         }
 
         internal static DoctorResponse Map(Doctor d, bool includePhoto = false)
