@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
 import '../models/city.dart';
 import '../providers/auth_provider.dart';
 import '../providers/city_provider.dart';
@@ -115,14 +116,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             Center(child: Stack(children: [
               CircleAvatar(
                 radius: 50,
-                backgroundColor: const Color(0xFFE3F2FD),
+                backgroundColor: AppColors.tint,
                 backgroundImage: avatar,
-                child: avatar == null ? Text(initials, style: const TextStyle(color: Color(0xFF0D47A1), fontSize: 36, fontWeight: FontWeight.bold)) : null,
+                child: avatar == null ? Text(initials, style: const TextStyle(color: AppColors.primary, fontSize: 36, fontWeight: FontWeight.bold)) : null,
               ),
               Positioned(
                 right: 0, bottom: 0,
                 child: Material(
-                  color: const Color(0xFF0D47A1), shape: const CircleBorder(),
+                  color: AppColors.primary, shape: const CircleBorder(),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: _pickImage,

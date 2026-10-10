@@ -4,7 +4,9 @@ import '../models/doctor.dart';
 import '../models/specialization.dart';
 import '../providers/doctor_provider.dart';
 import '../providers/specialization_provider.dart';
+import '../theme/app_theme.dart';
 import '../widgets/doctor_card.dart';
+import '../widgets/ui.dart';
 import 'doctor_details_screen.dart';
 
 class SearchTab extends StatefulWidget {
@@ -27,8 +29,15 @@ class _SearchTabState extends State<SearchTab> {
     _search();
   }
 
+  @override
+  void dispose() {
+    _q.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadSpecs() async {
     final s = await context.read<SpecializationProvider>().list();
+    if (!mounted) return;
     setState(() => _specs = s);
   }
 
@@ -39,38 +48,69 @@ class _SearchTabState extends State<SearchTab> {
     setState(() { _doctors = res; _loading = false; });
   }
 
+  void _pickSpec(int? id) {
+    setState(() => _specId = id);
+    _search();
+  }
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(children: [
+      bottom: false,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 14, 16, 12),
+          child: Text('Pronađi ljekara', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.ink)),
+        ),
         Padding(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
-            controller: _q,
-            onSubmitted: (_) => _search(),
-            decoration: InputDecoration(
-              hintText: 'Pretražite ljekare...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
-              suffixIcon: IconButton(icon: const Icon(Icons.tune), onPressed: _search),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DecoratedBox(
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), boxShadow: AppColors.softShadow),
+            child: TextField(
+              controller: _q,
+              onSubmitted: (_) => _search(),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Ime ljekara…',
+                prefixIcon: const Icon(Icons.search),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: IconSquare(Icons.arrow_forward, size: 32, iconSize: 16, color: Colors.white, background: AppColors.primary, onTap: _search),
+                ),
+              ),
             ),
           ),
         ),
         SizedBox(
-          height: 44,
-          child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12), children: [
-            _chip('Svi', _specId == null, () { setState(() => _specId = null); _search(); }),
-            ..._specs.map((s) => _chip(s.name, _specId == s.id, () { setState(() => _specId = s.id); _search(); })),
-          ]),
+          height: 56,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            children: [
+              SelectChip(label: 'Svi', selected: _specId == null, onTap: () => _pickSpec(null)),
+              for (final s in _specs) ...[
+                const SizedBox(width: 8),
+                SelectChip(label: s.name, selected: _specId == s.id, onTap: () => _pickSpec(s.id)),
+              ],
+            ],
+          ),
         ),
-        if (_loading) const Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())
-        else Expanded(child: _doctors.isEmpty ? const Center(child: Text('Nema rezultata.')) : ListView.builder(itemCount: _doctors.length, itemBuilder: (c, i) => DoctorCard(doctor: _doctors[i], onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DoctorDetailsScreen(doctor: _doctors[i])))))),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _doctors.isEmpty
+                  ? const Center(child: EmptyState(icon: Icons.person_search_outlined, message: 'Nema rezultata za ovu pretragu.'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(top: 4, bottom: 16),
+                      itemCount: _doctors.length,
+                      itemBuilder: (c, i) => DoctorCard(
+                        doctor: _doctors[i],
+                        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DoctorDetailsScreen(doctor: _doctors[i]))),
+                      ),
+                    ),
+        ),
       ]),
     );
   }
-
-  Widget _chip(String label, bool selected, VoidCallback onTap) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 4),
-    child: ChoiceChip(label: Text(label), selected: selected, onSelected: (_) => onTap()),
-  );
 }

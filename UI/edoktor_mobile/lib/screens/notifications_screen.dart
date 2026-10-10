@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
 import '../providers/notification_provider.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -31,7 +32,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             : ListView.builder(itemCount: p.items.length, itemBuilder: (c, i) {
                 final n = p.items[i];
                 return ListTile(
-                  leading: Icon(n.isRead ? Icons.notifications_none : Icons.notifications_active, color: n.isRead ? Colors.grey : const Color(0xFF0D47A1)),
+                  leading: Icon(n.isRead ? Icons.notifications_none : Icons.notifications_active, color: n.isRead ? Colors.grey : AppColors.primary),
                   title: Text(n.title, style: TextStyle(fontWeight: n.isRead ? FontWeight.normal : FontWeight.bold)),
                   subtitle: Text('${n.body}\n${fmt.format(n.createdAt)}'),
                   isThreeLine: true,

@@ -13,6 +13,7 @@ import 'screens/login_screen.dart';
 import 'screens/shell_screen.dart';
 import 'services/api_client.dart';
 import 'services/auth_store.dart';
+import 'theme/app_theme.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -53,12 +54,8 @@ class EDoktorApp extends StatelessWidget {
         title: 'eDoktor',
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0D47A1)),
-          useMaterial3: true,
-          appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF0D47A1), foregroundColor: Colors.white),
-          filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D47A1))),
-        ),
+        theme: buildAppTheme(),
+        scrollBehavior: AppScrollBehavior(),
         home: AuthStore.token == null ? const LoginScreen() : const ShellScreen(),
       ),
     );

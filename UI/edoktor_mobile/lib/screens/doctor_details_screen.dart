@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/doctor.dart';
+import '../theme/app_theme.dart';
+import '../widgets/ui.dart';
 import 'appointment_booking_screen.dart';
 
 class DoctorDetailsScreen extends StatelessWidget {
@@ -8,38 +10,152 @@ class DoctorDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final specs = doctor.specializations.map((s) => s.name).join(' • ');
+    final specs = doctor.specializations.map((s) => s.name).join(' · ');
+    final top = MediaQuery.of(context).padding.top + 8;
     return Scaffold(
-      appBar: AppBar(title: Text(doctor.fullName)),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            CircleAvatar(radius: 36, backgroundColor: const Color(0xFFE3F2FD), child: Text('${doctor.firstName.isNotEmpty ? doctor.firstName[0] : ''}${doctor.lastName.isNotEmpty ? doctor.lastName[0] : ''}', style: const TextStyle(color: Color(0xFF0D47A1), fontSize: 24, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(doctor.fullName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              Text(specs, style: const TextStyle(color: Colors.grey)),
-              const SizedBox(height: 4),
-              Row(children: [
-                ...List.generate(5, (i) => Icon(i < doctor.averageRating.round() ? Icons.star : Icons.star_border, size: 18, color: Colors.amber)),
-                const SizedBox(width: 6),
-                Text('${doctor.averageRating.toStringAsFixed(1)} (${doctor.reviewCount})'),
+      body: Column(children: [
+        Expanded(
+          child: ListView(padding: EdgeInsets.zero, children: [
+            Container(
+              padding: EdgeInsets.fromLTRB(16, top, 16, 64),
+              decoration: const BoxDecoration(
+                gradient: AppColors.gradient,
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+              ),
+              child: Column(children: [
+                Row(children: [
+                  IconSquare.onGradient(Icons.arrow_back, size: 36, iconSize: 18, onTap: () => Navigator.pop(context)),
+                ]),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: 0.25)),
+                  child: DoctorAvatar(doctor.fullName, size: 88),
+                ),
+                const SizedBox(height: 12),
+                Text(doctor.fullName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.bold)),
+                if (specs.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(specs, textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
+                ],
               ]),
-            ])),
+            ),
+            // Stats card and body are lifted together so the card overlaps the header without leaving a gap.
+            Transform.translate(
+              offset: const Offset(0, -40),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                AppCard(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: IntrinsicHeight(
+                    child: Row(children: [
+                      _Stat(value: doctor.averageRating.toStringAsFixed(1), label: 'Ocjena', icon: Icons.star_rounded),
+                      const VerticalDivider(width: 1, color: AppColors.line),
+                      _Stat(value: '${doctor.yearsExperience} god.', label: 'Iskustvo'),
+                      const VerticalDivider(width: 1, color: AppColors.line),
+                      _Stat(value: '${doctor.reviewCount}', label: 'Recenzija'),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    if (doctor.bio != null && doctor.bio!.isNotEmpty) ...[
+                      const Text('O ljekaru', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      Text(doctor.bio!, style: const TextStyle(fontSize: 14, height: 1.55, color: Color(0xFF4A5263))),
+                      const SizedBox(height: 16),
+                    ],
+                    if (doctor.clinic != null) ...[
+                      _InfoRow(
+                        icon: Icons.local_hospital_outlined,
+                        label: 'Klinika',
+                        value: [doctor.clinic!.name, doctor.clinic!.cityName].whereType<String>().where((s) => s.isNotEmpty).join(', '),
+                        sub: doctor.clinic!.address,
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    const _InfoRow(icon: Icons.videocam_outlined, label: 'Vrste pregleda', value: 'Uživo · Online konsultacija'),
+                  ]),
+                ),
+              ]),
+            ),
           ]),
-          const SizedBox(height: 16),
-          if (doctor.clinic != null) Row(children: [const Icon(Icons.location_on_outlined, size: 16), const SizedBox(width: 4), Text('${doctor.clinic!.name}, ${doctor.clinic!.cityName ?? ''}')]),
-          const SizedBox(height: 8),
-          Row(children: [const Icon(Icons.work_outline, size: 16), const SizedBox(width: 4), Text('${doctor.yearsExperience} god. iskustva  •  ${doctor.consultationPrice.toStringAsFixed(0)} EUR')]),
-          const SizedBox(height: 16),
-          if (doctor.bio != null) ...[const Text('O ljekaru', style: TextStyle(fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(doctor.bio!)],
-          const Spacer(),
-          SizedBox(width: double.infinity, child: FilledButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AppointmentBookingScreen(doctor: doctor))),
-            child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('Zakaži termin')))),
+        ),
+        Container(
+          padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: [BoxShadow(color: Color(0x14142346), blurRadius: 16, offset: Offset(0, -4))],
+          ),
+          child: Row(children: [
+            Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Cijena pregleda', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+              Text('${doctor.consultationPrice.toStringAsFixed(0)} €',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            ]),
+            const SizedBox(width: 16),
+            Expanded(
+              child: GradientButton(
+                label: 'Zakaži termin',
+                icon: Icons.event_outlined,
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AppointmentBookingScreen(doctor: doctor))),
+              ),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final String value;
+  final String label;
+  final IconData? icon;
+  const _Stat({required this.value, required this.label, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (icon != null) ...[Icon(icon, size: 18, color: AppColors.star), const SizedBox(width: 2)],
+          Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.primary)),
         ]),
-      ),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+      ]),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String? sub;
+  const _InfoRow({required this.icon, required this.label, required this.value, this.sub});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      child: Row(children: [
+        IconSquare(icon),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+            Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            if (sub != null && sub!.isNotEmpty) Text(sub!, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+          ]),
+        ),
+      ]),
     );
   }
 }
