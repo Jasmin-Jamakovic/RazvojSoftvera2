@@ -25,5 +25,12 @@ namespace eDoktor.API.Controllers
             var n = await _slots.GenerateAsync(req);
             return Ok(new { generated = n });
         }
+
+        [HttpDelete("{id}"), Authorize(Roles = Roles.AdminOrDoctor)]
+        public async Task<IActionResult> Delete(int id)
+        {
+            await _slots.DeleteAsync(id);
+            return NoContent();
+        }
     }
 }

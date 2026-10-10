@@ -56,9 +56,11 @@ class Appointment {
 class TimeSlot {
   final int id;
   final DateTime start, end;
-  TimeSlot({required this.id, required this.start, required this.end});
+  final bool isBooked;
+  TimeSlot({required this.id, required this.start, required this.end, this.isBooked = false});
   factory TimeSlot.fromJson(Map<String, dynamic> j) => TimeSlot(
-        id: j['id'], start: DateTime.parse(j['startUtc']).toLocal(), end: DateTime.parse(j['endUtc']).toLocal());
+        id: j['id'], start: DateTime.parse(j['startUtc']).toLocal(), end: DateTime.parse(j['endUtc']).toLocal(),
+        isBooked: j['isBooked'] ?? false);
 }
 
 class Payment {

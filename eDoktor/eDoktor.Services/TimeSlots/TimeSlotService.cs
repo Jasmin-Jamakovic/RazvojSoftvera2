@@ -6,6 +6,7 @@ using eDoktor.Model;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
 using eDoktor.Model.SearchObjects;
+using eDoktor.Services.Auth;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,8 @@ namespace eDoktor.Services.TimeSlots
     public class TimeSlotService : ITimeSlotService
     {
         private readonly eDoktorDbContext _db;
-        public TimeSlotService(eDoktorDbContext db) { _db = db; }
+        private readonly ICurrentUserService _current;
+        public TimeSlotService(eDoktorDbContext db, ICurrentUserService current) { _db = db; _current = current; }
 
         public async Task<List<TimeSlotResponse>> GetAsync(TimeSlotSearchObject s)
         {
@@ -38,38 +40,73 @@ namespace eDoktor.Services.TimeSlots
 
         public async Task<int> GenerateAsync(TimeSlotGenerateRequest req)
         {
-            var doctor = await _db.Doctors.FirstOrDefaultAsync(d => d.Id == req.DoctorId)
-                ?? throw new UserException("Doctor not found");
-            if (req.To < req.From) throw new UserException("Invalid date range");
-            if (req.SlotMinutes <= 0 || req.SlotMinutes > 240) throw new UserException("Invalid slot length");
+            if (!await _db.Doctors.AnyAsync(d => d.Id == req.DoctorId && !d.IsDeleted))
+                throw new NotFoundException("Ljekar nije pronađen.");
+            await EnsureCanManageAsync(req.DoctorId);
 
-            var existing = await _db.TimeSlots
-                .Where(t => t.DoctorId == req.DoctorId && t.StartUtc >= req.From && t.StartUtc <= req.To)
-                .Select(t => t.StartUtc).ToListAsync();
-            var existingSet = existing.ToHashSet();
-
-            var slots = new List<TimeSlot>();
-            for (var day = req.From.Date; day <= req.To.Date; day = day.AddDays(1))
+            foreach (var w in req.Windows)
             {
-                for (var h = req.StartHour; h < req.EndHour; h++)
+                if (w.EndUtc <= w.StartUtc)
+                    throw new UserException("Kraj radnog vremena mora biti nakon početka.");
+                if (w.EndUtc - w.StartUtc > TimeSpan.FromHours(24))
+                    throw new UserException("Radno vrijeme jednog dana ne može biti duže od 24 sata.");
+                if ((w.EndUtc - w.StartUtc).TotalMinutes < req.SlotMinutes)
+                    throw new UserException("Radno vrijeme je kraće od trajanja jednog termina.");
+            }
+            var from = req.Windows.Min(w => w.StartUtc);
+            var to = req.Windows.Max(w => w.EndUtc);
+            if (to <= DateTime.UtcNow)
+                throw new UserException("Radno vrijeme se ne može unositi za prošle datume.");
+
+            // Existing slots in the whole range, loaded once, so new slots never overlap them.
+            var existing = await _db.TimeSlots
+                .Where(t => t.DoctorId == req.DoctorId && t.StartUtc < to && t.EndUtc > from)
+                .Select(t => new { t.StartUtc, t.EndUtc })
+                .ToListAsync();
+
+            var now = DateTime.UtcNow;
+            var length = TimeSpan.FromMinutes(req.SlotMinutes);
+            var slots = new List<TimeSlot>();
+            foreach (var w in req.Windows.OrderBy(w => w.StartUtc))
+            {
+                for (var start = DateTime.SpecifyKind(w.StartUtc, DateTimeKind.Utc); start + length <= w.EndUtc; start += length)
                 {
-                    for (var m = 0; m < 60; m += req.SlotMinutes)
-                    {
-                        var start = new DateTime(day.Year, day.Month, day.Day, h, m, 0, DateTimeKind.Utc);
-                        if (existingSet.Contains(start)) continue;
-                        slots.Add(new TimeSlot
-                        {
-                            DoctorId = req.DoctorId,
-                            StartUtc = start,
-                            EndUtc = start.AddMinutes(req.SlotMinutes),
-                            IsBooked = false
-                        });
-                    }
+                    var end = start + length;
+                    if (start <= now) continue;
+                    if (existing.Any(e => e.StartUtc < end && e.EndUtc > start)) continue;
+                    if (slots.Any(n => n.StartUtc < end && n.EndUtc > start)) continue;
+                    slots.Add(new TimeSlot { DoctorId = req.DoctorId, StartUtc = start, EndUtc = end, IsBooked = false });
                 }
             }
+
             _db.TimeSlots.AddRange(slots);
             await _db.SaveChangesAsync();
             return slots.Count;
+        }
+
+        public async Task DeleteAsync(int id)
+        {
+            var slot = await _db.TimeSlots.FirstOrDefaultAsync(t => t.Id == id)
+                ?? throw new NotFoundException("Termin nije pronađen.");
+            await EnsureCanManageAsync(slot.DoctorId);
+
+            if (slot.IsBooked)
+                throw new UserException("Termin je rezervisan i ne može se obrisati. Prvo otkažite ili pomjerite pregled.");
+            if (await _db.Appointments.AnyAsync(a => a.TimeSlotId == id))
+                throw new UserException("Termin je vezan za historiju pregleda i ne može se obrisati.");
+
+            _db.TimeSlots.Remove(slot);
+            await _db.SaveChangesAsync();
+        }
+
+        // Admins manage every doctor's schedule; a doctor only their own.
+        private async Task EnsureCanManageAsync(int doctorId)
+        {
+            if (await _current.GetUserRoleAsync() == Roles.Admin) return;
+            var uid = await _current.GetUserIdAsync();
+            var ownDoctorId = await _db.Doctors.Where(d => d.UserId == uid).Select(d => (int?)d.Id).FirstOrDefaultAsync();
+            if (ownDoctorId != doctorId)
+                throw new ForbiddenException("Možete uređivati samo vlastito radno vrijeme.");
         }
     }
 }

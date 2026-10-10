@@ -4,6 +4,7 @@ import '../models/entities.dart';
 import '../providers/providers.dart';
 import '../utils/validators.dart';
 import '../widgets/entity_avatar.dart';
+import 'working_hours_screen.dart';
 
 class DoctorsScreen extends StatefulWidget {
   const DoctorsScreen({super.key});
@@ -133,15 +134,6 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
-  Future<void> _generateSlots(Doctor d) async {
-    final from = DateTime.now();
-    final to = from.add(const Duration(days: 14));
-    try {
-      final n = await context.read<DoctorProvider>().generateSlots(doctorId: d.id, from: from, to: to);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Generisano $n termina')));
-    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
-  }
-
   String _initials(String f, String l) => ((f.isNotEmpty ? f[0] : '') + (l.isNotEmpty ? l[0] : '')).toUpperCase();
 
   @override
@@ -183,7 +175,8 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           DataCell(Text('${d.averageRating.toStringAsFixed(1)} (${d.reviewCount})')),
           DataCell(Row(children: [
             IconButton(icon: const Icon(Icons.edit), onPressed: () => _edit(d)),
-            IconButton(icon: const Icon(Icons.event_available), tooltip: 'Generiši termine (14 dana)', onPressed: () => _generateSlots(d)),
+            IconButton(icon: const Icon(Icons.event_available), tooltip: 'Radno vrijeme i termini',
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => WorkingHoursScreen(doctor: d)))),
             IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _confirmDelete(d)),
           ])),
         ])).toList()));

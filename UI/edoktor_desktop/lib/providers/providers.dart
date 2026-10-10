@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show DateTimeRange;
 import 'package:flutter/foundation.dart';
 import '../models/dashboard.dart';
 import '../models/entities.dart';
@@ -79,10 +80,34 @@ class DoctorProvider extends ChangeNotifier {
     return Doctor.fromJson(res);
   }
   Future<void> delete(int id) => ApiClient.delete('/api/doctors/$id');
-  Future<int> generateSlots({required int doctorId, required DateTime from, required DateTime to}) async {
-    final res = await ApiClient.post('/api/time-slots/generate', {'doctorId': doctorId, 'from': from.toUtc().toIso8601String(), 'to': to.toUtc().toIso8601String()});
+
+  /// Creates bookable slots inside the given local working windows (one per working day).
+  Future<int> addWorkingHours({required int doctorId, required int slotMinutes, required List<DateTimeRange> windows}) async {
+    final res = await ApiClient.post('/api/time-slots/generate', {
+      'doctorId': doctorId,
+      'slotMinutes': slotMinutes,
+      'windows': windows.map((w) => {'startUtc': w.start.toUtc().toIso8601String(), 'endUtc': w.end.toUtc().toIso8601String()}).toList(),
+    });
     return res['generated'] as int;
   }
+
+  /// All slots of a doctor between [from] and [to] (local). The API caps a page at 100, so pages are fetched until exhausted.
+  Future<List<TimeSlot>> slots(int doctorId, DateTime from, DateTime to) async {
+    const pageSize = 100;
+    final all = <TimeSlot>[];
+    for (var page = 0;; page++) {
+      final res = await ApiClient.get('/api/time-slots', query: {
+        'doctorId': doctorId, 'from': from.toUtc().toIso8601String(), 'to': to.toUtc().toIso8601String(),
+        'page': page, 'pageSize': pageSize,
+      });
+      final items = (res as List? ?? []).map((e) => TimeSlot.fromJson(e)).toList();
+      all.addAll(items);
+      if (items.length < pageSize) break;
+    }
+    return all;
+  }
+
+  Future<void> deleteSlot(int id) => ApiClient.delete('/api/time-slots/$id');
 }
 
 class PatientProvider extends ChangeNotifier {

@@ -10,5 +10,6 @@ namespace eDoktor.Services.TimeSlots
     {
         Task<List<TimeSlotResponse>> GetAsync(TimeSlotSearchObject search);
         Task<int> GenerateAsync(TimeSlotGenerateRequest req);
+        Task DeleteAsync(int id);
     }
 }
