@@ -39,7 +39,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: Card(
         elevation: 4,
         child: Padding(padding: const EdgeInsets.all(32), child: Form(key: _formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('eDoktor Admin', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF0D47A1)), textAlign: TextAlign.center),
+          const Text('eDoktor Admin', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2E7D32)), textAlign: TextAlign.center),
           const SizedBox(height: 4),
           const Text('Prijava administratora', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 32),

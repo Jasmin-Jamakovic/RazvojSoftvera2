@@ -252,7 +252,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     width: wide ? 420 : 220, padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))]),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Icon(icon, color: const Color(0xFF0D47A1)), const SizedBox(width: 8), Text(label, style: const TextStyle(color: Colors.grey))]),
+      Row(children: [Icon(icon, color: const Color(0xFF2E7D32)), const SizedBox(width: 8), Text(label, style: const TextStyle(color: Colors.grey))]),
       const SizedBox(height: 8),
       Text(value, style: TextStyle(fontSize: wide ? 15 : 22, fontWeight: FontWeight.bold)),
     ]),

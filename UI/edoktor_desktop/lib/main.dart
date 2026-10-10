@@ -46,7 +46,8 @@ class EDoktorAdminApp extends StatelessWidget {
         navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0D47A1)),
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32), primary: const Color(0xFF2E7D32)),
+          scaffoldBackgroundColor: const Color(0xFFF1F6F2),
           useMaterial3: true,
         ),
         home: AuthStore.token != null && AuthStore.user?.role == 'admin' ? const ShellScreen() : const LoginScreen(),

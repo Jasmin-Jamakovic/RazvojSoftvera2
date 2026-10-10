@@ -16,7 +16,7 @@ class ReportPdf {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('eDoktor', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF0D47A1))),
+              pw.Text('eDoktor', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF2E7D32))),
               pw.Text('Generisano: ${_date.format(DateTime.now())}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
             ],
           ),
@@ -54,7 +54,7 @@ class ReportPdf {
         pw.SizedBox(height: 6),
         pw.TableHelper.fromTextArray(
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF0D47A1)),
+          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF2E7D32)),
           cellStyle: const pw.TextStyle(fontSize: 10),
           cellAlignments: {0: pw.Alignment.centerLeft, 1: pw.Alignment.centerLeft, 2: pw.Alignment.center, 3: pw.Alignment.center, 4: pw.Alignment.centerRight},
           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F5F9)),
@@ -101,7 +101,7 @@ class ReportPdf {
         pw.SizedBox(height: 16),
         pw.TableHelper.fromTextArray(
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF0D47A1)),
+          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF2E7D32)),
           cellStyle: const pw.TextStyle(fontSize: 9),
           cellAlignments: {0: pw.Alignment.centerLeft, 1: pw.Alignment.centerLeft, 2: pw.Alignment.centerLeft, 3: pw.Alignment.center, 4: pw.Alignment.center, 5: pw.Alignment.centerRight},
           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F5F9)),
@@ -143,7 +143,7 @@ class ReportPdf {
         pw.SizedBox(height: 16),
         pw.TableHelper.fromTextArray(
           headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
-          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF0D47A1)),
+          headerDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF2E7D32)),
           cellStyle: const pw.TextStyle(fontSize: 9),
           cellAlignments: {0: pw.Alignment.centerLeft, 1: pw.Alignment.centerLeft, 2: pw.Alignment.centerLeft, 3: pw.Alignment.center, 4: pw.Alignment.centerRight},
           oddRowDecoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F5F9)),

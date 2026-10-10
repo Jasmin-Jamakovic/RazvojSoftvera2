@@ -95,7 +95,7 @@ class _CitiesScreenState extends State<CitiesScreen> {
         return ListView.separated(itemCount: list.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (c, i) {
           final x = list[i];
           return ListTile(
-            leading: const Icon(Icons.location_city, color: Color(0xFF0D47A1)),
+            leading: const Icon(Icons.location_city, color: Color(0xFF2E7D32)),
             title: Text(x.name),
             subtitle: Text(x.country ?? ''),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [

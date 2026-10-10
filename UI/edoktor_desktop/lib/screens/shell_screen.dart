@@ -56,7 +56,7 @@ class _ShellScreenState extends State<ShellScreen> {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     return Scaffold(
-      backgroundColor: const Color(0xFFEEF1F6),
+      backgroundColor: const Color(0xFFF1F6F2),
       body: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -105,10 +105,10 @@ class _Sidebar extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF0D47A1), Color(0xFF123C86), Color(0xFF0B2C63)],
+          colors: [Color(0xFF4CAF50), Color(0xFF388E3C), Color(0xFF2E7D32)],
           stops: [0, 0.6, 1],
         ),
-        boxShadow: const [BoxShadow(color: Color(0x590D47A1), blurRadius: 28, offset: Offset(0, 12))],
+        boxShadow: const [BoxShadow(color: Color(0x552E7D32), blurRadius: 28, offset: Offset(0, 12))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Padding(
@@ -116,7 +116,7 @@ class _Sidebar extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text.rich(TextSpan(
               style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.3),
-              children: [TextSpan(text: 'e'), TextSpan(text: 'Doktor', style: TextStyle(color: Color(0xFF8EC5FF)))],
+              children: [TextSpan(text: 'e'), TextSpan(text: 'Doktor', style: TextStyle(color: Color(0xFFB9F6CA)))],
             )),
             SizedBox(height: 2),
             Text('Admin Panel', style: TextStyle(color: Colors.white60, fontSize: 12)),
@@ -143,8 +143,8 @@ class _Sidebar extends StatelessWidget {
             Row(children: [
               CircleAvatar(
                 radius: 17,
-                backgroundColor: const Color(0xFF8EC5FF),
-                child: Text(_initials, style: const TextStyle(color: Color(0xFF0B2C63), fontWeight: FontWeight.bold, fontSize: 13)),
+                backgroundColor: const Color(0xFFB9F6CA),
+                child: Text(_initials, style: const TextStyle(color: Color(0xFF1B5E20), fontWeight: FontWeight.bold, fontSize: 13)),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -219,7 +219,7 @@ class _NavItemState extends State<_NavItem> {
                 color: active ? Colors.white : Colors.white.withValues(alpha: 0.07),
                 borderRadius: BorderRadius.circular(9),
               ),
-              child: Icon(widget.icon, size: 18, color: active ? const Color(0xFF0D47A1) : Colors.white70),
+              child: Icon(widget.icon, size: 18, color: active ? const Color(0xFF2E7D32) : Colors.white70),
             ),
             const SizedBox(width: 12),
             Expanded(

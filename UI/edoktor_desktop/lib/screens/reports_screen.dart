@@ -206,7 +206,7 @@ class _DoctorReportTabState extends State<_DoctorReportTab> with AutomaticKeepAl
       )),
       barGroups: [
         for (var i = 0; i < rows.length; i++)
-          BarChartGroupData(x: i, barRods: [BarChartRodData(toY: rows[i].appointmentCount.toDouble(), color: const Color(0xFF0D47A1), width: 26, borderRadius: BorderRadius.circular(4))]),
+          BarChartGroupData(x: i, barRods: [BarChartRodData(toY: rows[i].appointmentCount.toDouble(), color: const Color(0xFF2E7D32), width: 26, borderRadius: BorderRadius.circular(4))]),
       ],
       titlesData: FlTitlesData(
         leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, interval: 1,
@@ -228,7 +228,7 @@ class _DoctorReportTabState extends State<_DoctorReportTab> with AutomaticKeepAl
     width: 260, padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))]),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Icon(icon, color: const Color(0xFF0D47A1)), const SizedBox(width: 8), Expanded(child: Text(label, style: const TextStyle(color: Colors.grey)))]),
+      Row(children: [Icon(icon, color: const Color(0xFF2E7D32)), const SizedBox(width: 8), Expanded(child: Text(label, style: const TextStyle(color: Colors.grey)))]),
       const SizedBox(height: 8),
       Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
     ]),

@@ -81,7 +81,7 @@ class _WorkingHoursScreenState extends State<WorkingHoursScreen> {
   Widget build(BuildContext context) {
     final lastDay = DateTime(_weekEnd.year, _weekEnd.month, _weekEnd.day - 1);
     return Scaffold(
-      backgroundColor: const Color(0xFFEEF1F6),
+      backgroundColor: const Color(0xFFF1F6F2),
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.pop(context)),
         title: Text('Radno vrijeme – dr. $_doctorName'),
@@ -128,7 +128,7 @@ class _WorkingHoursScreenState extends State<WorkingHoursScreen> {
     final isToday = DateUtils.isSameDay(day, DateTime.now());
     final now = DateTime.now();
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: isToday ? const BorderSide(color: Color(0xFF0D47A1), width: 1.5) : BorderSide.none),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: isToday ? const BorderSide(color: Color(0xFF2E7D32), width: 1.5) : BorderSide.none),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Padding(padding: const EdgeInsets.all(10), child: Column(children: [
           Text(weekdayNames[day.weekday - 1], style: const TextStyle(fontWeight: FontWeight.w600)),

@@ -78,7 +78,7 @@ class _RescheduleDialogState extends State<RescheduleDialog> {
         Text('Trenutni termin: ${_fullFmt.format(a.startUtc)}', style: const TextStyle(color: Colors.black54)),
         const SizedBox(height: 16),
         Row(children: [
-          const Icon(Icons.calendar_today, size: 18, color: Color(0xFF0D47A1)),
+          const Icon(Icons.calendar_today, size: 18, color: Color(0xFF2E7D32)),
           const SizedBox(width: 8),
           Expanded(child: Text(_dayFmt.format(_day))),
           OutlinedButton(onPressed: _pickDay, child: const Text('Promijeni datum')),

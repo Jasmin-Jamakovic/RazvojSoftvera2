@@ -40,7 +40,7 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   Widget build(BuildContext context) {
     final p = widget.patient;
     return Scaffold(
-      backgroundColor: const Color(0xFFEEF1F6),
+      backgroundColor: const Color(0xFFF1F6F2),
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.pop(context)),
         title: Text('Pacijent: ${p.fullName}'),
@@ -225,7 +225,7 @@ class _EntriesTabState extends State<_EntriesTab> {
         _section(Icons.healing, 'Dijagnoza', e.diagnosis),
         _section(Icons.medical_services, 'Terapija', e.therapy),
         _section(Icons.notes, 'Napomene', e.notes),
-        const Row(children: [Icon(Icons.medication, size: 18, color: Color(0xFF0D47A1)), SizedBox(width: 8), Text('E-recept', style: TextStyle(fontWeight: FontWeight.w600))]),
+        const Row(children: [Icon(Icons.medication, size: 18, color: Color(0xFF2E7D32)), SizedBox(width: 8), Text('E-recept', style: TextStyle(fontWeight: FontWeight.w600))]),
         const SizedBox(height: 6),
         if (e.prescription == null)
           const Text('Na ovom pregledu nije izdat recept.', style: TextStyle(color: Colors.black54))
@@ -238,7 +238,7 @@ class _EntriesTabState extends State<_EntriesTab> {
   Widget _section(IconData icon, String title, String? text) => Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Icon(icon, size: 18, color: const Color(0xFF0D47A1)), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.w600))]),
+          Row(children: [Icon(icon, size: 18, color: const Color(0xFF2E7D32)), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.w600))]),
           const SizedBox(height: 4),
           Text((text?.trim().isEmpty ?? true) ? '-' : text!),
         ]),
@@ -307,7 +307,7 @@ class _LabResultsTab extends StatelessWidget {
       itemBuilder: (c, i) {
         final r = results[i];
         return ListTile(
-          leading: const Icon(Icons.science, color: Color(0xFF0D47A1)),
+          leading: const Icon(Icons.science, color: Color(0xFF2E7D32)),
           title: Text(r.title),
           subtitle: Text(r.notes ?? ''),
           trailing: Text(_PatientDetailsScreenState.fmtDate(r.createdAt)),

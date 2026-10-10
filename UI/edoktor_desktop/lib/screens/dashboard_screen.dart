@@ -41,7 +41,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           alignment: BarChartAlignment.spaceAround,
           barGroups: [
             for (int i = 0; i < d.rows.length; i++)
-              BarChartGroupData(x: i, barRods: [BarChartRodData(toY: d.rows[i].revenue, color: const Color(0xFF0D47A1), width: 22)])
+              BarChartGroupData(x: i, barRods: [BarChartRodData(toY: d.rows[i].revenue, color: const Color(0xFF2E7D32), width: 22)])
           ],
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 48)),
@@ -61,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     width: 220, padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))]),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Icon(icon, color: const Color(0xFF0D47A1)), const SizedBox(width: 8), Text(label, style: const TextStyle(color: Colors.grey))]),
+      Row(children: [Icon(icon, color: const Color(0xFF2E7D32)), const SizedBox(width: 8), Text(label, style: const TextStyle(color: Colors.grey))]),
       const SizedBox(height: 8),
       Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
     ]),
