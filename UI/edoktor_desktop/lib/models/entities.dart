@@ -1,3 +1,5 @@
+import 'package:latlong2/latlong.dart';
+
 class Specialization {
   final int id; final String name; final String? description;
   Specialization({required this.id, required this.name, this.description});
@@ -6,8 +8,18 @@ class Specialization {
 
 class Clinic {
   final int id; final String name; final String? address; final int? cityId; final String? cityName;
-  Clinic({required this.id, required this.name, this.address, this.cityId, this.cityName});
-  factory Clinic.fromJson(Map<String, dynamic> j) => Clinic(id: j['id'], name: j['name'] ?? '', address: j['address'], cityId: j['cityId'], cityName: j['cityName']);
+  final double? latitude, longitude;
+  Clinic({required this.id, required this.name, this.address, this.cityId, this.cityName, this.latitude, this.longitude});
+  factory Clinic.fromJson(Map<String, dynamic> j) => Clinic(id: j['id'], name: j['name'] ?? '', address: j['address'], cityId: j['cityId'], cityName: j['cityName'],
+      latitude: (j['latitude'] as num?)?.toDouble(), longitude: (j['longitude'] as num?)?.toDouble());
+}
+
+class GeocodingResult {
+  final String displayName;
+  final LatLng point;
+  GeocodingResult(this.displayName, this.point);
+  factory GeocodingResult.fromJson(Map<String, dynamic> j) =>
+      GeocodingResult(j['displayName'] ?? '', LatLng((j['latitude'] as num).toDouble(), (j['longitude'] as num).toDouble()));
 }
 
 class City {
@@ -21,7 +33,8 @@ class Doctor {
   final int yearsExperience; final double consultationPrice;
   final Clinic? clinic; final List<Specialization> specializations;
   final double averageRating; final int reviewCount; final bool hasPhoto;
-  Doctor({required this.id, required this.firstName, required this.lastName, this.bio, required this.yearsExperience, required this.consultationPrice, this.clinic, required this.specializations, required this.averageRating, required this.reviewCount, this.hasPhoto = false});
+  final String? email, phoneNumber;
+  Doctor({required this.id, required this.firstName, required this.lastName, this.bio, required this.yearsExperience, required this.consultationPrice, this.clinic, required this.specializations, required this.averageRating, required this.reviewCount, this.hasPhoto = false, this.email, this.phoneNumber});
   String get fullName => 'Dr. $firstName $lastName';
   factory Doctor.fromJson(Map<String, dynamic> j) => Doctor(
         id: j['id'], firstName: j['firstName'] ?? '', lastName: j['lastName'] ?? '',
@@ -29,7 +42,8 @@ class Doctor {
         clinic: j['clinic'] == null ? null : Clinic.fromJson(j['clinic']),
         specializations: (j['specializations'] as List? ?? []).map((e) => Specialization.fromJson(e)).toList(),
         averageRating: (j['averageRating'] ?? 0).toDouble(), reviewCount: j['reviewCount'] ?? 0,
-        hasPhoto: j['hasPhoto'] ?? false);
+        hasPhoto: j['hasPhoto'] ?? false,
+        email: j['email'], phoneNumber: j['phoneNumber']);
 }
 
 class Appointment {

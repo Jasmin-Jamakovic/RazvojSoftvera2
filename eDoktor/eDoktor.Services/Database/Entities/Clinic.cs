@@ -12,12 +12,13 @@ namespace eDoktor.Services.Database.Entities
         [MaxLength(150)]
         public string Name { get; set; } = string.Empty;
 
+        [Required]
         [MaxLength(200)]
-        public string? Address { get; set; }
+        public string Address { get; set; } = string.Empty;
 
-        public int? CityId { get; set; }
+        public int CityId { get; set; }
         [ForeignKey(nameof(CityId))]
-        public virtual City? City { get; set; }
+        public virtual City City { get; set; } = null!;
 
         public double? Latitude { get; set; }
 

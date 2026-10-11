@@ -72,6 +72,7 @@ services:
       - Swagger__Enabled=${Swagger__Enabled}
       - App__TimeZone=${App__TimeZone}
       - VideoCall__BaseUrl=${VideoCall__BaseUrl}
+      - Geocoding__BaseUrl=${Geocoding__BaseUrl}
       - PayPal__ClientId=${PayPal__ClientId}
       - PayPal__ClientSecret=${PayPal__ClientSecret}
       - PayPal__BaseUrl=${PayPal__BaseUrl}

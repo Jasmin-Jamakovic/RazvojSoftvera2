@@ -104,23 +104,24 @@ namespace eDoktor.Services.Doctors
 
         public async Task<DoctorResponse> CreateAsync(DoctorUpsertRequest req)
         {
-            if (req.SpecializationIds.Count == 0) throw new UserException("At least one specialization is required");
+            await ValidateSpecializationsAsync(req.SpecializationIds);
             ValidatePhoto(req.ProfilePhoto);
 
             var clinic = await _db.Clinics.FirstOrDefaultAsync(c => c.Id == req.ClinicId && !c.IsDeleted)
-                ?? throw new UserException("Clinic not found");
+                ?? throw new NotFoundException("Odabrana klinika ne postoji.");
+            // The temporary password is emailed, so without a real address the doctor could never log in.
+            if (string.IsNullOrWhiteSpace(req.Email))
+                throw new UserException("Email ljekara je obavezan – na njega se šalje privremena lozinka.");
 
             var doctorRole = await _db.Roles.FirstAsync(r => r.Name == Roles.Doctor);
 
             var username = string.IsNullOrWhiteSpace(req.Username)
                 ? $"dr.{req.FirstName.ToLowerInvariant()}.{req.LastName.ToLowerInvariant()}"
-                : req.Username;
-            var email = string.IsNullOrWhiteSpace(req.Email)
-                ? $"{username}@edoktor.local"
-                : req.Email;
+                : req.Username.Trim();
+            var email = req.Email.Trim();
 
-            if (await _db.Users.AnyAsync(u => u.Username == username)) throw new UserException("Username already taken");
-            if (await _db.Users.AnyAsync(u => u.Email == email)) throw new UserException("Email already used");
+            if (await _db.Users.AnyAsync(u => u.Username == username)) throw new UserException($"Korisničko ime \"{username}\" je zauzeto. Unesite drugo.");
+            if (await _db.Users.AnyAsync(u => u.Email == email)) throw new UserException("Ova email adresa je već registrovana.");
 
             var tempPassword = GenerateTempPassword();
             var user = new User
@@ -182,12 +183,15 @@ namespace eDoktor.Services.Doctors
                 .Include(d => d.User)
                 .Include(d => d.DoctorSpecializations)
                 .FirstOrDefaultAsync(x => x.Id == id)
-                ?? throw new UserException("Doctor not found");
+                ?? throw new NotFoundException("Ljekar nije pronađen.");
             ValidatePhoto(req.ProfilePhoto);
+            if (!await _db.Clinics.AnyAsync(c => c.Id == req.ClinicId && !c.IsDeleted))
+                throw new NotFoundException("Odabrana klinika ne postoji.");
+            await ValidateSpecializationsAsync(req.SpecializationIds);
 
-            d.User.FirstName = req.FirstName;
-            d.User.LastName = req.LastName;
-            if (!string.IsNullOrWhiteSpace(req.PhoneNumber)) d.User.PhoneNumber = req.PhoneNumber;
+            d.User.FirstName = req.FirstName.Trim();
+            d.User.LastName = req.LastName.Trim();
+            d.User.PhoneNumber = string.IsNullOrWhiteSpace(req.PhoneNumber) ? null : req.PhoneNumber.Trim();
             d.ClinicId = req.ClinicId;
             d.Bio = req.Bio;
             d.YearsExperience = req.YearsExperience;
@@ -219,6 +223,14 @@ namespace eDoktor.Services.Doctors
                 throw new UserException("Slika mora biti validna slika (PNG, JPEG, GIF ili WEBP) i manja od 5 MB.");
         }
 
+        private async Task ValidateSpecializationsAsync(List<int> ids)
+        {
+            var distinct = ids.Distinct().ToList();
+            if (distinct.Count == 0) throw new UserException("Odaberite barem jednu specijalizaciju.");
+            if (await _db.Specializations.CountAsync(s => distinct.Contains(s.Id)) != distinct.Count)
+                throw new UserException("Jedna od odabranih specijalizacija ne postoji.");
+        }
+
         private static string GenerateTempPassword()
         {
             const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -239,6 +251,8 @@ namespace eDoktor.Services.Doctors
                 ConsultationPrice = d.ConsultationPrice,
                 ProfilePhoto = includePhoto ? d.ProfilePhoto : null,
                 HasPhoto = d.ProfilePhoto != null && d.ProfilePhoto.Length > 0,
+                Email = d.User?.Email,
+                PhoneNumber = d.User?.PhoneNumber,
                 Clinic = d.Clinic == null ? null : new ClinicResponse
                 {
                     Id = d.Clinic.Id, Name = d.Clinic.Name, Address = d.Clinic.Address,

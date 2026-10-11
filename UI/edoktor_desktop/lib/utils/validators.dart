@@ -61,12 +61,4 @@ class Validators {
     if (max != null && n > max) return '$field ne smije biti veće od $max.';
     return null;
   }
-
-  static String? password(String? v, {bool optional = false}) {
-    if (v == null || v.isEmpty) {
-      return optional ? null : 'Lozinka je obavezno polje.';
-    }
-    if (v.length < 6) return 'Lozinka mora imati najmanje 6 znakova.';
-    return null;
-  }
 }

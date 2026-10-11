@@ -17,7 +17,17 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> logout() async { await AuthStore.clear(); notifyListeners(); }
+  /// Ends the session on the server too (the token is revoked), then clears it locally.
+  /// A failed server call (e.g. API unreachable) must not keep the admin logged in locally.
+  Future<void> logout() async {
+    try {
+      await ApiClient.post('/api/auth/logout');
+    } catch (e) {
+      debugPrint('Server logout failed, clearing the local session anyway: $e');
+    }
+    await AuthStore.clear();
+    notifyListeners();
+  }
 }
 
 class DashboardProvider extends ChangeNotifier {
@@ -53,12 +63,18 @@ class ClinicProvider extends ChangeNotifier {
     final res = await ApiClient.get('/api/clinics', query: {'name': name?.isEmpty == true ? null : name, 'cityId': cityId, 'pageSize': 100});
     return (res['items'] as List? ?? []).map((e) => Clinic.fromJson(e)).toList();
   }
-  Future<void> upsert({int? id, required String name, String? address, int? cityId, double? latitude, double? longitude}) async {
+  Future<void> upsert({int? id, required String name, required String address, required int cityId, double? latitude, double? longitude}) async {
     final body = {'name': name, 'address': address, 'cityId': cityId, 'latitude': latitude, 'longitude': longitude};
     if (id == null) await ApiClient.post('/api/clinics', body);
     else await ApiClient.put('/api/clinics/$id', body);
   }
   Future<void> delete(int id) => ApiClient.delete('/api/clinics/$id');
+
+  /// Address -> coordinate candidates (OpenStreetMap lookup done by the API).
+  Future<List<GeocodingResult>> geocode(String address, {int? cityId}) async {
+    final res = await ApiClient.get('/api/geocoding', query: {'address': address.trim(), 'cityId': cityId});
+    return (res as List? ?? []).map((e) => GeocodingResult.fromJson(e)).toList();
+  }
 }
 
 class CityProvider extends ChangeNotifier {

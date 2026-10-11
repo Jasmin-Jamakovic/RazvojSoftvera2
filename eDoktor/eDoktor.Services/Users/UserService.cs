@@ -76,10 +76,18 @@ namespace eDoktor.Services.Users
         {
             await EnsureSelfOrAdminAsync(id, "Možete uređivati samo vlastiti profil.");
             var u = await _db.Users.Include(x => x.Role).Include(x => x.City).FirstOrDefaultAsync(x => x.Id == id)
-                ?? throw new UserException("User not found");
-            if (req.FirstName != null) u.FirstName = req.FirstName;
-            if (req.LastName != null) u.LastName = req.LastName;
-            if (req.Email != null) u.Email = req.Email;
+                ?? throw new NotFoundException("Korisnik nije pronađen.");
+            if (req.CityId.HasValue && !await _db.Cities.AnyAsync(c => c.Id == req.CityId.Value))
+                throw new UserException("Odabrani grad ne postoji.");
+            if (req.FirstName != null) u.FirstName = req.FirstName.Trim();
+            if (req.LastName != null) u.LastName = req.LastName.Trim();
+            if (req.Email != null)
+            {
+                var email = req.Email.Trim();
+                if (await _db.Users.AnyAsync(x => x.Email == email && x.Id != id))
+                    throw new UserException("Ova email adresa je već registrovana na drugom računu.");
+                u.Email = email;
+            }
             if (req.PhoneNumber != null) u.PhoneNumber = req.PhoneNumber;
             if (req.DateOfBirth.HasValue) u.DateOfBirth = req.DateOfBirth;
             if (req.Gender != null) u.Gender = req.Gender;
@@ -130,9 +138,9 @@ namespace eDoktor.Services.Users
                 throw new UserException("Unesite ispravan datum rođenja.");
 
             if (await _db.Users.AnyAsync(u => u.Username == req.Username))
-                throw new UserException("Username already taken");
+                throw new UserException("Korisničko ime je zauzeto. Odaberite drugo.");
             if (await _db.Users.AnyAsync(u => u.Email == req.Email))
-                throw new UserException("Email already used");
+                throw new UserException("Ova email adresa je već registrovana.");
 
             var patientRole = await _db.Roles.FirstAsync(r => r.Name == Roles.Patient);
 

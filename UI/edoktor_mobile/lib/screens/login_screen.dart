@@ -16,8 +16,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _user = TextEditingController(text: 'patient1');
-  final _pwd = TextEditingController(text: 'stringst');
+  final _user = TextEditingController();
+  final _pwd = TextEditingController();
   bool _busy = false;
   String? _error;
 

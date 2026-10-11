@@ -21,7 +21,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late final TextEditingController _lastName;
   late final TextEditingController _email;
   late final TextEditingController _phone;
-  late final TextEditingController _bloodType;
+  static const _bloodTypes = ['0+', '0-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
+  String? _bloodType;
   late final TextEditingController _allergies;
   String? _gender;
   List<City> _cities = [];
@@ -40,7 +41,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _lastName = TextEditingController(text: u.lastName);
     _email = TextEditingController(text: u.email);
     _phone = TextEditingController(text: u.phoneNumber ?? '');
-    _bloodType = TextEditingController(text: u.bloodType ?? '');
+    _bloodType = _bloodTypes.contains(u.bloodType) ? u.bloodType : null;
     _allergies = TextEditingController(text: u.allergies ?? '');
     _gender = (u.gender == 'M' || u.gender == 'F') ? u.gender : null;
     _cityId = u.cityId;
@@ -50,7 +51,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   @override
   void dispose() {
-    for (final c in [_firstName, _lastName, _email, _phone, _bloodType, _allergies]) {
+    for (final c in [_firstName, _lastName, _email, _phone, _allergies]) {
       c.dispose();
     }
     super.dispose();
@@ -84,7 +85,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'phoneNumber': _phone.text.trim(),
         'cityId': _cityId,
         'gender': _gender,
-        'bloodType': _bloodType.text.trim().isEmpty ? null : _bloodType.text.trim(),
+        'bloodType': _bloodType,
         'allergies': _allergies.text.trim().isEmpty ? null : _allergies.text.trim(),
       };
       // Only send the image when the user picked a new one.
@@ -159,7 +160,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               onChanged: (v) => setState(() => _gender = v),
             ),
             const SizedBox(height: 12),
-            TextFormField(controller: _bloodType, decoration: const InputDecoration(labelText: 'Krvna grupa (opciono)', border: OutlineInputBorder()), validator: (v) => Validators.maxLen(v, 5, 'Krvna grupa')),
+            DropdownButtonFormField<String?>(
+              initialValue: _bloodType,
+              decoration: const InputDecoration(labelText: 'Krvna grupa (opciono)', border: OutlineInputBorder()),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Nije poznata')),
+                ..._bloodTypes.map((b) => DropdownMenuItem<String?>(value: b, child: Text(b))),
+              ],
+              onChanged: (v) => setState(() => _bloodType = v)),
             const SizedBox(height: 12),
             TextFormField(controller: _allergies, maxLines: 2, decoration: const InputDecoration(labelText: 'Alergije (opciono)', border: OutlineInputBorder()), validator: (v) => Validators.maxLen(v, 300, 'Alergije')),
             if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: const TextStyle(color: Colors.red))],

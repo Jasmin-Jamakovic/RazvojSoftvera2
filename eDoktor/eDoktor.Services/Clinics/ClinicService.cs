@@ -1,4 +1,6 @@
 using System.Linq;
+using System.Threading.Tasks;
+using eDoktor.Model;
 using eDoktor.Model.Requests;
 using eDoktor.Model.Responses;
 using eDoktor.Model.SearchObjects;
@@ -14,6 +16,24 @@ namespace eDoktor.Services.Clinics
         IClinicService
     {
         public ClinicService(eDoktorDbContext db, IMapper mapper) : base(db, mapper) { }
+
+        public override async Task<ClinicResponse> CreateAsync(ClinicUpsertRequest request)
+        {
+            await EnsureCityExistsAsync(request.CityId);
+            return await base.CreateAsync(request);
+        }
+
+        public override async Task<ClinicResponse> UpdateAsync(int id, ClinicUpsertRequest request)
+        {
+            await EnsureCityExistsAsync(request.CityId);
+            return await base.UpdateAsync(id, request);
+        }
+
+        private async Task EnsureCityExistsAsync(int? cityId)
+        {
+            if (cityId == null || !await _context.Cities.AnyAsync(c => c.Id == cityId.Value))
+                throw new UserException("Odabrani grad ne postoji.");
+        }
 
         protected override System.Linq.IQueryable<Clinic> ApplyFilter(System.Linq.IQueryable<Clinic> query, ClinicSearchObject s)
         {

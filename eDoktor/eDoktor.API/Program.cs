@@ -9,6 +9,7 @@ using eDoktor.Services.Clinics;
 using eDoktor.Services.Dashboard;
 using eDoktor.Services.Database;
 using eDoktor.Services.Doctors;
+using eDoktor.Services.Geocoding;
 using eDoktor.Services.Mapping;
 using eDoktor.Services.MedicalRecords;
 using eDoktor.Services.Notifications;
@@ -166,6 +167,8 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddSingleton(new VideoCallOptions { BaseUrl = Required("VideoCall__BaseUrl") });
 builder.Services.AddScoped<IVideoCallService, VideoCallService>();
 builder.Services.AddScoped<IConsultationChatService, ConsultationChatService>();
+builder.Services.AddSingleton(new GeocodingOptions { BaseUrl = Required("Geocoding__BaseUrl") });
+builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
 
 // Appointment reminders (24h / 1h before), run in the background inside the API.
 builder.Services.AddHostedService<AppointmentReminderService>();
