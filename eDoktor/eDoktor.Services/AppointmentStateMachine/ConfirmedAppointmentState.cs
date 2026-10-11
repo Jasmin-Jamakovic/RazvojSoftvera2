@@ -22,15 +22,19 @@ namespace eDoktor.Services.AppointmentStateMachine
         public override async Task<AppointmentResponse> CompleteAsync(int id)
         {
             var a = await LoadAsync(id);
-            if (a.TimeSlot?.StartUtc > DateTime.UtcNow)
-                throw new UserException("Appointment cannot be completed before its scheduled time");
-            a.StateMachine = nameof(CompletedAppointmentState);
-            a.CompletedAt = DateTime.UtcNow;
-            a.CompletedById = await ActingUserIdAsync();
-            await _context.SaveChangesAsync();
+            if (a.TimeSlot.StartUtc > DateTime.UtcNow)
+                throw new UserException("Pregled se može označiti kao završen tek nakon zakazanog vremena.");
+            var actingUserId = await ActingUserIdAsync();
+            await InTransactionAsync(async () =>
+            {
+                a.StateMachine = nameof(CompletedAppointmentState);
+                a.CompletedAt = DateTime.UtcNow;
+                a.CompletedById = actingUserId;
+                await _context.SaveChangesAsync();
+                await NotifyAsync(a.PatientId, "Termin završen",
+                    $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} je označen kao završen. Možete ostaviti recenziju.");
+            });
             await _serviceProvider.GetRequiredService<IRecommenderService>().InvalidateAsync(a.PatientId);
-            await NotifyAsync(a.PatientId, "Termin završen",
-                $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} je označen kao završen. Možete ostaviti recenziju.");
             return await MapAfterChangeAsync(a);
         }
 
@@ -41,42 +45,53 @@ namespace eDoktor.Services.AppointmentStateMachine
             var refundEligible = hoursUntil >= 24 && a.Payment?.Status == PaymentStatus.Captured;
             var shouldRefund = refundEligible;
 
-            a.StateMachine = nameof(CancelledAppointmentState);
-            a.CancelledAt = DateTime.UtcNow;
-            a.CancelledById = await ActingUserIdAsync();
-            a.CancellationReason = reason;
-            if (a.TimeSlot != null) a.TimeSlot.IsBooked = false;
-            await _context.SaveChangesAsync();
-
-            // Actually issue the PayPal refund (not just promise it by email) when eligible,
-            // then record the refund on our payment row (the gateway itself does no DB work).
-            // A failed refund must not undo the cancellation: it is logged and the payment stays "Captured",
-            // so the admin can refund it manually from the payments screen.
-            if (shouldRefund && !string.IsNullOrEmpty(a.Payment?.CaptureId))
+            var actingUserId = await ActingUserIdAsync();
+            // Cancellation, refund bookkeeping and the in-app notification are committed together.
+            await InTransactionAsync(async () =>
             {
-                var logger = _serviceProvider.GetRequiredService<ILogger<ConfirmedAppointmentState>>();
-                try
+                a.StateMachine = nameof(CancelledAppointmentState);
+                a.CancelledAt = DateTime.UtcNow;
+                a.CancelledById = actingUserId;
+                a.CancellationReason = reason;
+                if (a.TimeSlot != null) a.TimeSlot.IsBooked = false;
+                await _context.SaveChangesAsync();
+
+                // Actually issue the PayPal refund (not just promise it by email) when eligible,
+                // then record the refund on our payment row (the gateway itself does no DB work).
+                // A failed refund must not undo the cancellation: it is logged and the payment stays "Captured",
+                // so the admin can refund it manually from the payments screen.
+                if (shouldRefund && !string.IsNullOrEmpty(a.Payment?.CaptureId))
                 {
-                    var paypal = _serviceProvider.GetRequiredService<IPayPalService>();
-                    if (await paypal.RefundAsync(a.Payment.CaptureId, a.Payment.Amount, "Otkazivanje termina (≥24h prije termina)"))
+                    var logger = _serviceProvider.GetRequiredService<ILogger<ConfirmedAppointmentState>>();
+                    try
                     {
-                        a.Payment.Status = PaymentStatus.Refunded;
-                        a.Payment.RefundedAt = DateTime.UtcNow;
-                        await _context.SaveChangesAsync();
+                        var paypal = _serviceProvider.GetRequiredService<IPayPalService>();
+                        if (await paypal.RefundAsync(a.Payment.CaptureId, a.Payment.Amount, "Otkazivanje termina (≥24h prije termina)"))
+                        {
+                            a.Payment.Status = PaymentStatus.Refunded;
+                            a.Payment.RefundedAt = DateTime.UtcNow;
+                            await _context.SaveChangesAsync();
+                        }
+                        else
+                        {
+                            logger.LogWarning("PayPal refused the automatic refund for appointment {AppointmentId} (capture {CaptureId}).", a.Id, a.Payment.CaptureId);
+                            shouldRefund = false;
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        logger.LogWarning("PayPal refused the automatic refund for appointment {AppointmentId} (capture {CaptureId}).", a.Id, a.Payment.CaptureId);
+                        logger.LogWarning(ex, "Automatic refund failed for appointment {AppointmentId} (capture {CaptureId}).", a.Id, a.Payment.CaptureId);
                         shouldRefund = false;
                     }
                 }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "Automatic refund failed for appointment {AppointmentId} (capture {CaptureId}).", a.Id, a.Payment.CaptureId);
-                    shouldRefund = false;
-                }
-            }
+                await NotifyAsync(a.PatientId, "Termin otkazan",
+                    $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
+                    + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}")
+                    + (shouldRefund ? " Novac je vraćen na vaš PayPal račun."
+                       : refundEligible ? " Povrat sredstava će biti izvršen naknadno." : ""));
+            });
 
+            // Messages leave the system only after the cancellation is committed.
             var rabbit = _serviceProvider.GetRequiredService<IRabbitMQService>();
             await rabbit.PublishAsync(QueueNames.AppointmentCancelled, new AppointmentCancelledMessage
             {
@@ -90,12 +105,6 @@ namespace eDoktor.Services.AppointmentStateMachine
                 Reason = reason,
                 ShouldRefund = shouldRefund
             });
-
-            await NotifyAsync(a.PatientId, "Termin otkazan",
-                $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({a.TimeSlot?.StartUtc:dd.MM.yyyy. HH:mm}) je otkazan."
-                + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}")
-                + (shouldRefund ? " Novac je vraćen na vaš PayPal račun."
-                   : refundEligible ? " Povrat sredstava će biti izvršen naknadno." : ""));
 
             return await MapAfterChangeAsync(a);
         }

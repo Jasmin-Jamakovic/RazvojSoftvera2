@@ -24,6 +24,8 @@ namespace eDoktor.Services.Dashboard
 
             var y = year ?? DateTime.UtcNow.Year;
             var m = month ?? DateTime.UtcNow.Month;
+            if (m < 1 || m > 12 || y < 2000 || y > 2100)
+                throw new UserException("Neispravan mjesec ili godina.");
             var monthStart = new DateTime(y, m, 1);
             var monthEnd = monthStart.AddMonths(1);
 

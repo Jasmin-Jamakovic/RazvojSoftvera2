@@ -6,26 +6,49 @@ using MimeKit;
 
 namespace eDoktor.Worker
 {
-    public static class MailSender
+    // SMTP settings come from .env and are read once. With no sender address/password configured
+    // (development), emails are written to the log instead of being sent.
+    public class MailSender
     {
-        // Throws on a real send failure so the consumer can retry / dead-letter the message
-        // instead of silently swallowing it. In dev mode (no SMTP configured) it logs and returns.
-        public static void Send(EmailMessage email, ILogger logger)
-        {
-            var smtpHost = Environment.GetEnvironmentVariable("_host") ?? "smtp.gmail.com";
-            var smtpPort = int.Parse(Environment.GetEnvironmentVariable("_port") ?? "587");
-            var emailUsername = Environment.GetEnvironmentVariable("_fromAddress");
-            var emailPassword = Environment.GetEnvironmentVariable("_password");
+        private readonly ILogger _logger;
+        private readonly string? _fromAddress;
+        private readonly string? _password;
+        private readonly string _host = string.Empty;
+        private readonly int _port;
+        private readonly bool _enableSsl;
+        private readonly int _timeoutMs;
+        private readonly string _displayName = string.Empty;
 
-            // Dev mode: if SMTP isn't configured, just log instead of failing.
-            if (string.IsNullOrEmpty(emailUsername) || string.IsNullOrEmpty(emailPassword))
+        public MailSender(ILogger logger)
+        {
+            _logger = logger;
+            _fromAddress = Environment.GetEnvironmentVariable("_fromAddress");
+            _password = Environment.GetEnvironmentVariable("_password");
+            if (!IsConfigured) return;
+
+            _host = Required("_host");
+            _port = int.Parse(Required("_port"));
+            _enableSsl = bool.Parse(Required("_enableSSL"));
+            _timeoutMs = int.Parse(Required("_timeout"));
+            _displayName = Required("_displayName");
+        }
+
+        private bool IsConfigured => !string.IsNullOrEmpty(_fromAddress) && !string.IsNullOrEmpty(_password);
+
+        private static string Required(string name) => Environment.GetEnvironmentVariable(name)
+            ?? throw new InvalidOperationException($"{name} is not configured (set it in .env).");
+
+        // Throws on a real send failure so the consumer can retry / dead-letter the message.
+        public async Task SendAsync(EmailMessage email)
+        {
+            if (!IsConfigured)
             {
-                logger.LogInformation("[dev-email] To={To} Subject={Subject}\n{Body}", email.To, email.Subject, email.Body);
+                _logger.LogInformation("[dev-email] To={To} Subject={Subject}\n{Body}", email.To, email.Subject, email.Body);
                 return;
             }
 
             var msg = new MimeMessage();
-            msg.From.Add(new MailboxAddress("eDoktor", emailUsername));
+            msg.From.Add(new MailboxAddress(_displayName, _fromAddress));
             msg.To.Add(MailboxAddress.Parse(email.To));
             msg.Subject = email.Subject;
 
@@ -43,17 +66,17 @@ namespace eDoktor.Worker
             };
             msg.Body = new TextPart("html") { Text = htmlBody };
 
-            using var client = new SmtpClient();
-            client.Connect(smtpHost, smtpPort, SecureSocketOptions.StartTls);
-            client.Authenticate(emailUsername, emailPassword);
-            client.Send(msg);
-            client.Disconnect(true);
-            logger.LogInformation("Email sent: {To} / {Subject}", email.To, email.Subject);
+            using var client = new SmtpClient { Timeout = _timeoutMs };
+            await client.ConnectAsync(_host, _port, _enableSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None);
+            await client.AuthenticateAsync(_fromAddress, _password);
+            await client.SendAsync(msg);
+            await client.DisconnectAsync(true);
+            _logger.LogInformation("Email sent: {To} / {Subject}", email.To, email.Subject);
         }
 
         private static string Template(string greeting, string lead, string body) => $@"
 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #222'>
-    <h2 style='color: #0d47a1;'>{greeting},</h2>
+    <h2 style='color: #2e7d32;'>{greeting},</h2>
     <p style='font-size: 16px; line-height: 1.5;'>{lead}</p>
     <div style='background-color: #f5f5f5; padding: 15px; border-radius: 6px; margin: 20px 0; white-space: pre-wrap;'>{body}</div>
     <p style='margin-top: 30px;'>Tim eDoktor</p>

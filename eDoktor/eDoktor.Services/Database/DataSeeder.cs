@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using eDoktor.Model;
 using eDoktor.Services.Auth;
 using eDoktor.Services.Database.Entities;
@@ -22,9 +23,9 @@ namespace eDoktor.Services.Database
 
         // Runs after EnsureCreated. Idempotent: only inserts what is missing.
         // Uses real BCrypt hashes so the seeded "stringst" credentials actually work.
-        public static void Seed(eDoktorDbContext db, IPasswordHasher hasher)
+        public static async Task SeedAsync(eDoktorDbContext db, IPasswordHasher hasher)
         {
-            if (db.Users.Any()) return;
+            if (await db.Users.AnyAsync()) return;
 
             var hash = hasher.Hash("stringst");
             var users = new List<User>
@@ -46,22 +47,22 @@ namespace eDoktor.Services.Database
                 new() { Id = 4, UserId = 13, ClinicId = 3, YearsExperience = 15, ConsultationPrice = 65m, ProfilePhoto = Doc4Photo, Bio = "Neurolog sa iskustvom u dijagnostici i liječenju glavobolja, migrene, epilepsije i degenerativnih bolesti nervnog sistema." }
             };
 
-            db.Database.OpenConnection();
+            await db.Database.OpenConnectionAsync();
             try
             {
-                db.Database.ExecuteSqlRaw("SET IDENTITY_INSERT [Users] ON");
+                await db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Users] ON");
                 db.Users.AddRange(users);
-                db.SaveChanges();
-                db.Database.ExecuteSqlRaw("SET IDENTITY_INSERT [Users] OFF");
+                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Users] OFF");
 
-                db.Database.ExecuteSqlRaw("SET IDENTITY_INSERT [Doctors] ON");
+                await db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Doctors] ON");
                 db.Doctors.AddRange(doctors);
-                db.SaveChanges();
-                db.Database.ExecuteSqlRaw("SET IDENTITY_INSERT [Doctors] OFF");
+                await db.SaveChangesAsync();
+                await db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Doctors] OFF");
             }
             finally
             {
-                db.Database.CloseConnection();
+                await db.Database.CloseConnectionAsync();
             }
 
             db.DoctorSpecializations.AddRange(
@@ -70,7 +71,7 @@ namespace eDoktor.Services.Database
                 new DoctorSpecialization { DoctorId = 3, SpecializationId = 3 },
                 new DoctorSpecialization { DoctorId = 4, SpecializationId = 4 }
             );
-            db.SaveChanges();
+            await db.SaveChangesAsync();
 
             // ---- Transactional / activity mock data -------------------------------
             // Built as object graphs so EF assigns the FKs (TimeSlotId, AppointmentId, …)
@@ -283,7 +284,7 @@ namespace eDoktor.Services.Database
             }
             db.TimeSlots.AddRange(freeSlots);
 
-            db.SaveChanges();
+            await db.SaveChangesAsync();
 
             // PayPal transaction history for the paid appointments (needs the appointment ids generated above).
             // apt6 was cancelled more than 24h ahead, so its payment has already been refunded.
@@ -301,11 +302,11 @@ namespace eDoktor.Services.Database
                 RefundedAt = a == apt6 ? a.CancelledAt : null
             }).ToList();
             db.PayPalPayments.AddRange(payments);
-            db.SaveChanges();
+            await db.SaveChangesAsync();
 
             for (int i = 0; i < paid.Length; i++)
                 paid[i].PayPalPaymentId = payments[i].Id;
-            db.SaveChanges();
+            await db.SaveChangesAsync();
         }
     }
 }

@@ -23,8 +23,8 @@ namespace eDoktor.API.Controllers
         public async Task<IActionResult> Room(int appointmentId)
         {
             var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
-            var roomId = await _svc.GetOrCreateRoomAsync(appointmentId, uid);
-            return Ok(new { roomId, joinUrl = $"https://meet.jit.si/{roomId}" });
+            var (roomId, joinUrl) = await _svc.GetOrCreateRoomAsync(appointmentId, uid);
+            return Ok(new { roomId, joinUrl });
         }
 
         [HttpGet("{appointmentId}/messages")]

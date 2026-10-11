@@ -66,6 +66,10 @@ namespace eDoktor.Services.Database.Entities
         [MaxLength(500)]
         public string? RescheduleReason { get; set; }
 
+        // When the 24h / 1h reminders were sent (so each is sent once, also across restarts).
+        public DateTime? Reminder24hSentAt { get; set; }
+        public DateTime? Reminder1hSentAt { get; set; }
+
         public int? PayPalPaymentId { get; set; }
         [ForeignKey(nameof(PayPalPaymentId))]
         public virtual PayPalPayment? Payment { get; set; }

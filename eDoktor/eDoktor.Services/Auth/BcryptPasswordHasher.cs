@@ -6,8 +6,9 @@ namespace eDoktor.Services.Auth
 
         public bool Verify(string password, string hash)
         {
+            // A stored value that is not a valid BCrypt hash can never match.
             try { return BCrypt.Net.BCrypt.Verify(password, hash); }
-            catch { return false; }
+            catch (BCrypt.Net.SaltParseException) { return false; }
         }
     }
 }

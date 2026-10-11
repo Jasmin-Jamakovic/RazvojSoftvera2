@@ -160,7 +160,7 @@ namespace eDoktor.Services.Payments
                 p.Status = PaymentStatus.Cancelled;
 
             // Amount comes from the server-side catalog (appointment price), never from the client.
-            var order = await _paypal.CreateOrderAsync(appt.Price, "EUR", $"appointment-{appt.Id}");
+            var order = await _paypal.CreateOrderAsync(appt.Price, _paypalOptions.Currency, $"appointment-{appt.Id}");
 
             // Two writes (insert payment, link to appointment) committed atomically.
             await using var tx = await _db.Database.BeginTransactionAsync();
@@ -169,7 +169,7 @@ namespace eDoktor.Services.Payments
                 AppointmentId = appt.Id,
                 OrderId = order.OrderId,
                 Amount = appt.Price,
-                Currency = "EUR",
+                Currency = _paypalOptions.Currency,
                 Status = PaymentStatus.Created
             };
             _db.PayPalPayments.Add(payment);
@@ -191,7 +191,7 @@ namespace eDoktor.Services.Payments
         public async Task<PaymentResponse> CaptureAsync(string orderId)
         {
             var payment = await _db.PayPalPayments.FirstOrDefaultAsync(p => p.OrderId == orderId)
-                ?? throw new NotFoundException("Payment not found for order " + orderId);
+                ?? throw new NotFoundException("Plaćanje nije pronađeno.");
 
             var appt = await _db.Appointments.Include(a => a.Patient)
                 .FirstOrDefaultAsync(a => a.Id == payment.AppointmentId);
@@ -219,25 +219,30 @@ namespace eDoktor.Services.Payments
             if (appt != null)
             {
                 // Confirm through the state machine (Pending -> Confirmed), not a direct column write.
+                // The state joins this transaction.
                 if (appt.StateMachine == nameof(PendingAppointmentState))
                     await _sp.GetRequiredService<InitialAppointmentState>().GetState(appt.StateMachine).ConfirmAsync(appt.Id);
-
-                await _rabbit.PublishAsync(QueueNames.PaymentCaptured, new PaymentCapturedMessage
-                {
-                    PaymentId = payment.Id,
-                    AppointmentId = appt.Id,
-                    PatientId = appt.PatientId,
-                    PatientEmail = appt.Patient!.Email,
-                    PatientName = $"{appt.Patient.FirstName} {appt.Patient.LastName}",
-                    Amount = payment.Amount,
-                    Currency = payment.Currency
-                });
 
                 await _notifications.SendAsync(appt.PatientId, "Plaćanje uspješno",
                     $"Vaša uplata od {payment.Amount:0.00} {payment.Currency} za termin je uspješno obrađena. Termin je potvrđen.",
                     "payment");
             }
             await tx.CommitAsync();
+
+            // The receipt email is queued only after the payment is committed.
+            if (appt != null)
+            {
+                await _rabbit.PublishAsync(QueueNames.PaymentCaptured, new PaymentCapturedMessage
+                {
+                    PaymentId = payment.Id,
+                    AppointmentId = appt.Id,
+                    PatientId = appt.PatientId,
+                    PatientEmail = appt.Patient.Email,
+                    PatientName = $"{appt.Patient.FirstName} {appt.Patient.LastName}",
+                    Amount = payment.Amount,
+                    Currency = payment.Currency
+                });
+            }
 
             return _mapper.Map<PaymentResponse>(payment);
         }

@@ -11,10 +11,11 @@ namespace eDoktor.Services.Auth
 {
     public class JwtTokenOptions
     {
-        public string Issuer { get; set; } = "eDoktor";
-        public string Audience { get; set; } = "eDoktor";
-        public string Key { get; set; } = "change-me-please-this-must-be-at-least-32-bytes-long!!!";
-        public int ExpiryMinutes { get; set; } = 1440;
+        // All values are supplied from .env in Program.cs.
+        public string Issuer { get; set; } = string.Empty;
+        public string Audience { get; set; } = string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public int ExpiryMinutes { get; set; }
     }
 
     public class JwtTokenService : IJwtTokenService

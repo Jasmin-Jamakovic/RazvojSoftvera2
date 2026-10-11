@@ -1,6 +1,6 @@
 services:
   sqlserver:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: mcr.microsoft.com/mssql/server:2022-CU20-ubuntu-22.04
     restart: unless-stopped
     environment:
       - ACCEPT_EULA=Y
@@ -18,7 +18,7 @@ services:
       - edoktor-2025
 
   rabbitmq:
-    image: rabbitmq:3.13-management
+    image: rabbitmq:3.13.7-management
     container_name: rabbitmq
     hostname: rabbitmq
     restart: unless-stopped
@@ -38,7 +38,7 @@ services:
       - edoktor-2025
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.9-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -55,7 +55,7 @@ services:
       context: .
     restart: unless-stopped
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:5190
       - ConnectionStrings__DefaultConnection=Server=${_source},1433;Database=${_catalog};User=sa;Password=${_saPassword};ConnectRetryCount=0;TrustServerCertificate=True
       - _saPassword=${_saPassword}
@@ -68,10 +68,14 @@ services:
       - Jwt__Audience=${Jwt__Audience}
       - Jwt__Key=${Jwt__Key}
       - Jwt__ExpiryMinutes=${Jwt__ExpiryMinutes}
-      - Cors__AllowedOrigins=${Cors__AllowedOrigins:-http://localhost:5190,http://127.0.0.1:5190,http://localhost:3000,http://localhost:8088,http://localhost:8089}
+      - Cors__AllowedOrigins=${Cors__AllowedOrigins}
+      - Swagger__Enabled=${Swagger__Enabled}
+      - App__TimeZone=${App__TimeZone}
+      - VideoCall__BaseUrl=${VideoCall__BaseUrl}
       - PayPal__ClientId=${PayPal__ClientId}
       - PayPal__ClientSecret=${PayPal__ClientSecret}
       - PayPal__BaseUrl=${PayPal__BaseUrl}
+      - PayPal__Currency=${PayPal__Currency}
       - PayPal__WebhookId=${PayPal__WebhookId}
       - PayPal__ReturnUrl=${PayPal__ReturnUrl}
       - PayPal__CancelUrl=${PayPal__CancelUrl}
@@ -100,6 +104,7 @@ services:
       - _displayName=${_displayName}
       - _timeout=${_timeout}
       - _port=${_port}
+      - App__TimeZone=${App__TimeZone}
       - _rabbitMqHost=${_rabbitMqHost}
       - _rabbitMqUser=${_rabbitMqUser}
       - _rabbitMqPassword=${_rabbitMqPassword}

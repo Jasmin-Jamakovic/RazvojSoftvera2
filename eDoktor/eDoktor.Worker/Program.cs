@@ -1,5 +1,6 @@
 using System.Text;
 using DotNetEnv;
+using eDoktor.Model;
 using eDoktor.Model.Messages;
 using eDoktor.Worker;
 using Microsoft.Extensions.Logging;
@@ -13,12 +14,16 @@ using var loggerFactory = LoggerFactory.Create(b =>
     b.AddSimpleConsole(o => { o.TimestampFormat = "HH:mm:ss "; o.SingleLine = true; }));
 var logger = loggerFactory.CreateLogger("eDoktor.Worker");
 
-var hostname = Environment.GetEnvironmentVariable("_rabbitMqHost") ?? "rabbitmq";
+string Required(string name) => Environment.GetEnvironmentVariable(name)
+    ?? throw new InvalidOperationException($"{name} is not configured (set it in .env).");
+
+var hostname = Required("_rabbitMqHost");
 var username = Environment.GetEnvironmentVariable("_rabbitMqUser")
     ?? throw new InvalidOperationException("_rabbitMqUser is not configured.");
 var password = Environment.GetEnvironmentVariable("_rabbitMqPassword")
     ?? throw new InvalidOperationException("_rabbitMqPassword is not configured.");
-var port = int.Parse(Environment.GetEnvironmentVariable("_rabbitMqPort") ?? "5672");
+var port = int.Parse(Required("_rabbitMqPort"));
+var mail = new MailSender(logger);
 
 // Connect with exponential backoff (no Thread.Sleep / .Wait()).
 IConnection? connection = null;
@@ -54,7 +59,8 @@ channel.BasicQos(prefetchSize: 0, prefetchCount: 1, global: false);
 // poison message can't spin forever, but a transient failure is retried and never lost silently.
 void DeclareAndConsume(string queue, Func<string, Task> handler)
 {
-    channel.QueueDeclare(queue, durable: false, exclusive: false, autoDelete: false, arguments: null);
+    // Durable queue + persistent messages (set by the publisher): queued emails survive a broker restart.
+    channel.QueueDeclare(queue, durable: true, exclusive: false, autoDelete: false, arguments: null);
     var consumer = new AsyncEventingBasicConsumer(channel);
     consumer.Received += async (_, ea) =>
     {
@@ -87,87 +93,81 @@ void DeclareAndConsume(string queue, Func<string, Task> handler)
     logger.LogInformation("Listening on '{Queue}'.", queue);
 }
 
-DeclareAndConsume(QueueNames.Email, body =>
+DeclareAndConsume(QueueNames.Email, async body =>
 {
     var msg = JsonConvert.DeserializeObject<EmailMessage>(body)!;
-    MailSender.Send(msg, logger);
-    return Task.CompletedTask;
+    await mail.SendAsync(msg);
 });
 
-DeclareAndConsume(QueueNames.AppointmentBooked, body =>
+DeclareAndConsume(QueueNames.AppointmentBooked, async body =>
 {
     var m = JsonConvert.DeserializeObject<AppointmentBookedMessage>(body)!;
-    MailSender.Send(new EmailMessage
+    await mail.SendAsync(new EmailMessage
     {
         To = m.PatientEmail,
         FirstName = m.PatientName,
         Subject = "Vaš termin je zakazan",
-        Body = $"Zakazali ste termin kod {m.DoctorName} na {m.StartUtc:g} ({m.Type}).",
+        Body = $"Zakazali ste termin kod {m.DoctorName} na {DisplayTime.Format(m.StartUtc)} ({(m.Type == "Online" ? "online konsultacija" : "pregled uživo")}).",
         Kind = EmailKind.AppointmentBooked
-    }, logger);
-    return Task.CompletedTask;
+    });
 });
 
-DeclareAndConsume(QueueNames.AppointmentCancelled, body =>
+DeclareAndConsume(QueueNames.AppointmentCancelled, async body =>
 {
     var m = JsonConvert.DeserializeObject<AppointmentCancelledMessage>(body)!;
-    MailSender.Send(new EmailMessage
+    await mail.SendAsync(new EmailMessage
     {
         To = m.PatientEmail,
         FirstName = m.PatientName,
         Subject = "Vaš termin je otkazan",
-        Body = $"Termin kod {m.DoctorName} ({m.StartUtc:g}) je otkazan. {(m.ShouldRefund ? "Povrat sredstava će biti obrađen." : "")}",
+        Body = $"Termin kod {m.DoctorName} ({DisplayTime.Format(m.StartUtc)}) je otkazan. {(m.ShouldRefund ? "Novac je vraćen na vaš PayPal račun." : "")}",
         Kind = EmailKind.AppointmentCancelled
-    }, logger);
-    return Task.CompletedTask;
+    });
 });
 
-DeclareAndConsume(QueueNames.AppointmentReminder, body =>
+DeclareAndConsume(QueueNames.AppointmentReminder, async body =>
 {
     var m = JsonConvert.DeserializeObject<AppointmentReminderMessage>(body)!;
-    MailSender.Send(new EmailMessage
+    await mail.SendAsync(new EmailMessage
     {
         To = m.PatientEmail,
         FirstName = m.PatientName,
-        Subject = $"Podsjetnik na termin ({m.Window})",
-        Body = $"Imate termin kod {m.DoctorName} na {m.StartUtc:g}.",
+        Subject = m.Window == "1h" ? "Podsjetnik: termin za sat vremena" : "Podsjetnik: termin u naredna 24 sata",
+        Body = $"Imate termin kod dr. {m.DoctorName} {DisplayTime.Format(m.StartUtc)}.",
         Kind = EmailKind.AppointmentReminder
-    }, logger);
-    return Task.CompletedTask;
+    });
 });
 
-DeclareAndConsume(QueueNames.PaymentCaptured, body =>
+DeclareAndConsume(QueueNames.PaymentCaptured, async body =>
 {
     var m = JsonConvert.DeserializeObject<PaymentCapturedMessage>(body)!;
-    MailSender.Send(new EmailMessage
+    await mail.SendAsync(new EmailMessage
     {
         To = m.PatientEmail,
         FirstName = m.PatientName,
         Subject = "Potvrda plaćanja",
         Body = $"Vaša uplata u iznosu {m.Amount} {m.Currency} je uspješno zaprimljena. Termin je potvrđen.",
         Kind = EmailKind.PaymentReceipt
-    }, logger);
-    return Task.CompletedTask;
+    });
 });
 
-DeclareAndConsume(QueueNames.PrescriptionIssued, body =>
+DeclareAndConsume(QueueNames.PrescriptionIssued, async body =>
 {
     var m = JsonConvert.DeserializeObject<PrescriptionIssuedMessage>(body)!;
-    MailSender.Send(new EmailMessage
+    await mail.SendAsync(new EmailMessage
     {
         To = m.PatientEmail,
         FirstName = m.PatientName,
         Subject = "Izdat e-recept",
         Body = $"{m.DoctorName} vam je izdao novi e-recept. Možete ga pogledati u aplikaciji eDoktor pod 'Karton → Recepti'.",
         Kind = EmailKind.PrescriptionIssued
-    }, logger);
-    return Task.CompletedTask;
+    });
 });
 
-DeclareAndConsume(QueueNames.DoctorCreated, body =>
+DeclareAndConsume(QueueNames.DoctorCreated, async body =>
 {
     var m = JsonConvert.DeserializeObject<DoctorCreatedMessage>(body)!;
-    MailSender.Send(new EmailMessage
+    await mail.SendAsync(new EmailMessage
     {
         To = m.Email,
         FirstName = m.FirstName,
@@ -175,8 +175,7 @@ DeclareAndConsume(QueueNames.DoctorCreated, body =>
         Subject = "Vaš eDoktor nalog je kreiran",
         Body = $"Korisničko ime: {m.Username}\nPrivremena lozinka: {m.TemporaryPassword}\n\nMolimo da promijenite lozinku prilikom prve prijave.",
         Kind = EmailKind.DoctorCredentials
-    }, logger);
-    return Task.CompletedTask;
+    });
 });
 
 logger.LogInformation("eDoktor.Worker is running. Press Ctrl+C to stop.");

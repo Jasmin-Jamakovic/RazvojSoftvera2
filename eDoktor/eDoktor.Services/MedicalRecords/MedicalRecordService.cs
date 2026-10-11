@@ -112,17 +112,13 @@ namespace eDoktor.Services.MedicalRecords
                 ?? throw new NotFoundException("Termin nije pronađen.");
             if (appt.Doctor.UserId != doctorUserId) throw new ForbiddenException("Samo ljekar ovog pregleda može upisati nalaz u karton.");
 
-            var record = await _db.MedicalRecords.FirstOrDefaultAsync(r => r.PatientId == appt.PatientId);
-            if (record == null)
-            {
-                record = new MedicalRecord { PatientId = appt.PatientId };
-                _db.MedicalRecords.Add(record);
-                await _db.SaveChangesAsync();
-            }
+            // A missing record is created together with the entry in a single SaveChanges.
+            var record = await _db.MedicalRecords.FirstOrDefaultAsync(r => r.PatientId == appt.PatientId)
+                ?? new MedicalRecord { PatientId = appt.PatientId };
 
             var entry = new MedicalRecordEntry
             {
-                MedicalRecordId = record.Id,
+                MedicalRecord = record,
                 AppointmentId = appt.Id,
                 Diagnosis = req.Diagnosis,
                 Therapy = req.Therapy,
@@ -190,14 +186,9 @@ namespace eDoktor.Services.MedicalRecords
             if (!await _db.Users.AnyAsync(u => u.Id == req.PatientId && u.Role.Name == Roles.Patient))
                 throw new NotFoundException("Pacijent nije pronađen.");
             await EnsureCanAccessPatientAsync(req.PatientId);
-            var record = await _db.MedicalRecords.FirstOrDefaultAsync(r => r.PatientId == req.PatientId);
-            if (record == null)
-            {
-                record = new MedicalRecord { PatientId = req.PatientId };
-                _db.MedicalRecords.Add(record);
-                await _db.SaveChangesAsync();
-            }
-            var l = new LabResult { MedicalRecordId = record.Id, Title = req.Title, Notes = req.Notes };
+            var record = await _db.MedicalRecords.FirstOrDefaultAsync(r => r.PatientId == req.PatientId)
+                ?? new MedicalRecord { PatientId = req.PatientId };
+            var l = new LabResult { MedicalRecord = record, Title = req.Title, Notes = req.Notes };
             _db.LabResults.Add(l);
             await _db.SaveChangesAsync();
 

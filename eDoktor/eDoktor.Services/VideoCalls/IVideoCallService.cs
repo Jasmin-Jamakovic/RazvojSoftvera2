@@ -4,6 +4,6 @@ namespace eDoktor.Services.VideoCalls
 {
     public interface IVideoCallService
     {
-        Task<string> GetOrCreateRoomAsync(int appointmentId, int userId);
+        Task<(string RoomId, string JoinUrl)> GetOrCreateRoomAsync(int appointmentId, int userId);
     }
 }

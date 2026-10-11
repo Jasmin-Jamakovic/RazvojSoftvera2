@@ -59,11 +59,11 @@ namespace eDoktor.Services
             {
                 await _context.SaveChangesAsync();
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex)
             {
                 // FK Restrict tripped: the record is still referenced elsewhere. Surface a clear
                 // reason instead of a generic 500 (spec §3.1: "prikazati jasnu poruku o razlogu").
-                throw new UserException("Zapis se ne može obrisati jer se koristi u drugim podacima.");
+                throw new UserException("Zapis se ne može obrisati jer se koristi u drugim podacima.", ex);
             }
             return true;
         }

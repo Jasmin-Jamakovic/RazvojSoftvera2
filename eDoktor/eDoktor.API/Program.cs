@@ -17,6 +17,7 @@ using eDoktor.Services.PayPal;
 using eDoktor.Services.RabbitMQ;
 using eDoktor.Services.Recommender;
 using eDoktor.Services.Redis;
+using eDoktor.Services.Reminders;
 using eDoktor.Services.Reviews;
 using eDoktor.Services.SignalR;
 using eDoktor.Services.Specializations;
@@ -35,16 +36,17 @@ Env.Load(@"../.env");
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Every setting comes from .env (via docker-compose); a missing value stops the start-up with a clear message
+// instead of silently falling back to a value hidden in code.
+static string Required(string name) => Environment.GetEnvironmentVariable(name)
+    ?? throw new InvalidOperationException($"{name} is not configured (set it in .env).");
+
 // DB — connection string comes from env (docker provides ConnectionStrings__DefaultConnection);
 // for local runs it is composed from the .env values, so no secret lives in appsettings.json.
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrWhiteSpace(connectionString))
 {
-    var dbServer = Environment.GetEnvironmentVariable("_source") ?? "localhost";
-    var dbCatalog = Environment.GetEnvironmentVariable("_catalog") ?? "eDoktor";
-    var dbPassword = Environment.GetEnvironmentVariable("_saPassword")
-        ?? throw new InvalidOperationException("No connection string and _saPassword is not set.");
-    connectionString = $"Server={dbServer},1433;Database={dbCatalog};User=sa;Password={dbPassword};ConnectRetryCount=0;TrustServerCertificate=True";
+    connectionString = $"Server={Required("_source")},{Required("_sqlPort")};Database={Required("_catalog")};User=sa;Password={Required("_saPassword")};ConnectRetryCount=0;TrustServerCertificate=True";
 }
 builder.Services.AddEDoktorDbContext(connectionString);
 
@@ -57,10 +59,10 @@ if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32
     throw new InvalidOperationException("Jwt__Key must be configured and at least 32 bytes long (set it in .env).");
 var jwtOpts = new JwtTokenOptions
 {
-    Issuer = Environment.GetEnvironmentVariable("Jwt__Issuer") ?? "eDoktor",
-    Audience = Environment.GetEnvironmentVariable("Jwt__Audience") ?? "eDoktor",
+    Issuer = Required("Jwt__Issuer"),
+    Audience = Required("Jwt__Audience"),
     Key = jwtKey,
-    ExpiryMinutes = int.TryParse(Environment.GetEnvironmentVariable("Jwt__ExpiryMinutes"), out var em) ? em : 1440
+    ExpiryMinutes = int.Parse(Required("Jwt__ExpiryMinutes"))
 };
 builder.Services.AddSingleton(jwtOpts);
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
@@ -109,35 +111,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// Redis (optional)
+// Redis (optional): recommendations work without it, just uncached. An unreachable Redis is logged.
 var redisConn = Environment.GetEnvironmentVariable("Redis__ConnectionString");
-if (!string.IsNullOrWhiteSpace(redisConn))
+builder.Services.AddSingleton<IRedisCacheService>(sp =>
 {
+    if (string.IsNullOrWhiteSpace(redisConn)) return new NullRedisCacheService();
     try
     {
-        var mux = ConnectionMultiplexer.Connect(redisConn);
-        builder.Services.AddSingleton<IConnectionMultiplexer>(mux);
-        builder.Services.AddSingleton<IRedisCacheService, RedisCacheService>();
+        return new RedisCacheService(ConnectionMultiplexer.Connect(redisConn));
     }
-    catch
+    catch (Exception ex)
     {
-        builder.Services.AddSingleton<IRedisCacheService, NullRedisCacheService>();
+        sp.GetRequiredService<ILogger<Program>>().LogWarning(ex, "Redis at {Redis} is unreachable; recommendations will not be cached.", redisConn);
+        return new NullRedisCacheService();
     }
-}
-else
-{
-    builder.Services.AddSingleton<IRedisCacheService, NullRedisCacheService>();
-}
+});
 
 // PayPal
 var paypalOpts = new PayPalOptions
 {
+    // Client id/secret/webhook may be left empty in development: payments then report that PayPal is not configured.
     ClientId = Environment.GetEnvironmentVariable("PayPal__ClientId") ?? string.Empty,
     ClientSecret = Environment.GetEnvironmentVariable("PayPal__ClientSecret") ?? string.Empty,
-    BaseUrl = Environment.GetEnvironmentVariable("PayPal__BaseUrl") ?? "https://api-m.sandbox.paypal.com",
     WebhookId = Environment.GetEnvironmentVariable("PayPal__WebhookId") ?? string.Empty,
-    ReturnUrl = Environment.GetEnvironmentVariable("PayPal__ReturnUrl") ?? string.Empty,
-    CancelUrl = Environment.GetEnvironmentVariable("PayPal__CancelUrl") ?? string.Empty
+    BaseUrl = Required("PayPal__BaseUrl"),
+    Currency = Required("PayPal__Currency"),
+    ReturnUrl = Required("PayPal__ReturnUrl"),
+    CancelUrl = Required("PayPal__CancelUrl")
 };
 builder.Services.AddSingleton(paypalOpts);
 builder.Services.AddHttpClient<IPayPalService, PayPalService>();
@@ -163,8 +163,12 @@ builder.Services.AddScoped<IMedicalRecordService, MedicalRecordService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IRecommenderService, RecommenderService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddSingleton(new VideoCallOptions { BaseUrl = Required("VideoCall__BaseUrl") });
 builder.Services.AddScoped<IVideoCallService, VideoCallService>();
 builder.Services.AddScoped<IConsultationChatService, ConsultationChatService>();
+
+// Appointment reminders (24h / 1h before), run in the background inside the API.
+builder.Services.AddHostedService<AppointmentReminderService>();
 
 // Appointment state machine
 builder.Services.AddScoped<InitialAppointmentState>();
@@ -201,8 +205,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // CORS — explicit allow-list (configurable via Cors__AllowedOrigins, comma-separated).
-var corsOrigins = (Environment.GetEnvironmentVariable("Cors__AllowedOrigins")
-        ?? "http://localhost:5190,http://127.0.0.1:5190,http://localhost:3000")
+var corsOrigins = Required("Cors__AllowedOrigins")
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.WithOrigins(corsOrigins).AllowAnyMethod().AllowAnyHeader()));
@@ -214,12 +217,14 @@ using (var scope = app.Services.CreateScope())
     var ctx = scope.ServiceProvider.GetRequiredService<eDoktorDbContext>();
     // EnsureCreated builds the schema and applies HasData seeds on first run.
     // No migrations are checked in because this project doesn't evolve the schema between releases.
-    ctx.Database.EnsureCreated();
+    await ctx.Database.EnsureCreatedAsync();
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
-    DataSeeder.Seed(ctx, hasher);
+    await DataSeeder.SeedAsync(ctx, hasher);
 }
 
-if (app.Environment.IsDevelopment())
+// Swagger is API documentation (read-only); it is switched on/off in .env so it can be shown to reviewers
+// while the API itself runs in Production mode (no developer exception pages).
+if (bool.Parse(Required("Swagger__Enabled")))
 {
     app.UseSwagger();
     app.UseSwaggerUI();

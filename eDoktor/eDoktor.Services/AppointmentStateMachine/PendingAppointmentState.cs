@@ -19,24 +19,35 @@ namespace eDoktor.Services.AppointmentStateMachine
         public override async Task<AppointmentResponse> ConfirmAsync(int id)
         {
             var a = await LoadAsync(id);
-            a.StateMachine = nameof(ConfirmedAppointmentState);
-            a.ConfirmedAt = DateTime.UtcNow;
-            a.ConfirmedById = await ActingStaffIdAsync();
-            await _context.SaveChangesAsync();
-            await NotifyAsync(a.PatientId, "Termin potvrđen",
-                $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({a.TimeSlot?.StartUtc:dd.MM.yyyy. HH:mm}) je potvrđen.");
+            var staffId = await ActingStaffIdAsync();
+            await InTransactionAsync(async () =>
+            {
+                a.StateMachine = nameof(ConfirmedAppointmentState);
+                a.ConfirmedAt = DateTime.UtcNow;
+                a.ConfirmedById = staffId;
+                await _context.SaveChangesAsync();
+                await NotifyAsync(a.PatientId, "Termin potvrđen",
+                    $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je potvrđen.");
+            });
             return await MapAfterChangeAsync(a);
         }
 
         public override async Task<AppointmentResponse> CancelAsync(int id, string? reason)
         {
             var a = await LoadAsync(id);
-            a.StateMachine = nameof(CancelledAppointmentState);
-            a.CancelledAt = DateTime.UtcNow;
-            a.CancelledById = await ActingUserIdAsync();
-            a.CancellationReason = reason;
-            if (a.TimeSlot != null) a.TimeSlot.IsBooked = false;
-            await _context.SaveChangesAsync();
+            var actingUserId = await ActingUserIdAsync();
+            await InTransactionAsync(async () =>
+            {
+                a.StateMachine = nameof(CancelledAppointmentState);
+                a.CancelledAt = DateTime.UtcNow;
+                a.CancelledById = actingUserId;
+                a.CancellationReason = reason;
+                a.TimeSlot.IsBooked = false;
+                await _context.SaveChangesAsync();
+                await NotifyAsync(a.PatientId, "Termin otkazan",
+                    $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
+                    + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}"));
+            });
 
             var rabbit = _serviceProvider.GetRequiredService<IRabbitMQService>();
             await rabbit.PublishAsync(QueueNames.AppointmentCancelled, new AppointmentCancelledMessage
@@ -51,10 +62,6 @@ namespace eDoktor.Services.AppointmentStateMachine
                 Reason = reason,
                 ShouldRefund = false
             });
-
-            await NotifyAsync(a.PatientId, "Termin otkazan",
-                $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({a.TimeSlot?.StartUtc:dd.MM.yyyy. HH:mm}) je otkazan."
-                + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}"));
 
             return await MapAfterChangeAsync(a);
         }

@@ -97,21 +97,23 @@ namespace eDoktor.Services.AppointmentStateMachine
 
             var oldStart = a.TimeSlot.StartUtc;
 
-            // Slot swap + in-app notification are several SaveChanges calls; commit them together.
-            await using var tx = await _context.Database.BeginTransactionAsync();
-            a.TimeSlot.IsBooked = false;
-            newSlot.IsBooked = true;
-            a.TimeSlotId = newSlot.Id;
-            a.TimeSlot = newSlot;
-            a.RescheduledAt = DateTime.UtcNow;
-            a.RescheduledById = await ActingUserIdAsync();
-            a.RescheduleReason = reason;
-            await _context.SaveChangesAsync();
-
             var doctorName = $"{a.Doctor.User.FirstName} {a.Doctor.User.LastName}";
-            var text = $"Vaš termin kod dr. {doctorName} je pomjeren sa {oldStart:dd.MM.yyyy. HH:mm} na {newSlot.StartUtc:dd.MM.yyyy. HH:mm}. Razlog: {reason}";
-            await NotifyAsync(a.PatientId, "Termin pomjeren", text);
-            await tx.CommitAsync();
+            var text = $"Vaš termin kod dr. {doctorName} je pomjeren sa {DisplayTime.Format(oldStart)} na {DisplayTime.Format(newSlot.StartUtc)}. Razlog: {reason}";
+            var actingUserId = await ActingUserIdAsync();
+
+            // Slot swap + in-app notification are several SaveChanges calls; commit them together.
+            await InTransactionAsync(async () =>
+            {
+                a.TimeSlot.IsBooked = false;
+                newSlot.IsBooked = true;
+                a.TimeSlotId = newSlot.Id;
+                a.TimeSlot = newSlot;
+                a.RescheduledAt = DateTime.UtcNow;
+                a.RescheduledById = actingUserId;
+                a.RescheduleReason = reason;
+                await _context.SaveChangesAsync();
+                await NotifyAsync(a.PatientId, "Termin pomjeren", text);
+            });
 
             var rabbit = _serviceProvider.GetRequiredService<IRabbitMQService>();
             await rabbit.PublishAsync(QueueNames.Email, new EmailMessage
@@ -125,6 +127,20 @@ namespace eDoktor.Services.AppointmentStateMachine
             });
 
             return a;
+        }
+
+        /// Runs several saves (state change, payment, in-app notification) as one transaction. Joins the
+        /// caller's transaction when there already is one (e.g. the payment capture confirming an appointment).
+        protected async Task InTransactionAsync(Func<Task> work)
+        {
+            if (_context.Database.CurrentTransaction != null)
+            {
+                await work();
+                return;
+            }
+            await using var tx = await _context.Database.BeginTransactionAsync();
+            await work();
+            await tx.CommitAsync();
         }
 
         /// Creates an in-app notification (persisted + pushed over SignalR) for a user.

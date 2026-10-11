@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using eDoktor.Model;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -15,7 +16,8 @@ namespace eDoktor.Services.PayPal
     {
         public string ClientId { get; set; } = string.Empty;
         public string ClientSecret { get; set; } = string.Empty;
-        public string BaseUrl { get; set; } = "https://api-m.sandbox.paypal.com";
+        public string BaseUrl { get; set; } = string.Empty;
+        public string Currency { get; set; } = string.Empty;
         public string WebhookId { get; set; } = string.Empty;
         // Where PayPal redirects after the payer approves / cancels. The mobile WebView intercepts these
         // URLs (they are never actually loaded), so any https URL the app recognises works.
@@ -28,18 +30,30 @@ namespace eDoktor.Services.PayPal
     {
         private readonly HttpClient _http;
         private readonly PayPalOptions _opts;
+        private readonly ILogger<PayPalService> _logger;
         private string? _accessToken;
         private DateTime _tokenExpiry = DateTime.MinValue;
 
-        public PayPalService(HttpClient http, PayPalOptions opts)
+        public PayPalService(HttpClient http, PayPalOptions opts, ILogger<PayPalService> logger)
         {
             _http = http;
             _opts = opts;
+            _logger = logger;
             _http.BaseAddress = new Uri(_opts.BaseUrl);
+        }
+
+        // PayPal's error details go to the log (for reproducing the problem), not to the client.
+        private UserException Failure(string operation, HttpResponseMessage resp, string body)
+        {
+            _logger.LogError("PayPal {Operation} failed: {Status} {Body}", operation, (int)resp.StatusCode, body);
+            return new UserException("PayPal trenutno nije dostupan. Pokušajte ponovo kasnije.");
         }
 
         private async Task<string> GetAccessTokenAsync()
         {
+            if (string.IsNullOrWhiteSpace(_opts.ClientId) || string.IsNullOrWhiteSpace(_opts.ClientSecret))
+                throw new UserException("Plaćanje nije podešeno (PayPal__ClientId / PayPal__ClientSecret u .env).");
+
             if (_accessToken != null && DateTime.UtcNow < _tokenExpiry) return _accessToken;
 
             using var req = new HttpRequestMessage(HttpMethod.Post, "/v1/oauth2/token");
@@ -50,7 +64,7 @@ namespace eDoktor.Services.PayPal
             var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                throw new UserException($"PayPal token error: {(int)resp.StatusCode} {body}");
+                throw Failure("authenticate", resp, body);
 
             var token = JObject.Parse(body);
             _accessToken = (string?)token["access_token"];
@@ -93,7 +107,7 @@ namespace eDoktor.Services.PayPal
             var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                throw new UserException($"PayPal create order error: {(int)resp.StatusCode} {body}");
+                throw Failure("create order", resp, body);
 
             var data = JObject.Parse(body);
             var orderId = (string?)data["id"] ?? throw new UserException("PayPal did not return an order id.");
@@ -117,7 +131,7 @@ namespace eDoktor.Services.PayPal
             var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                throw new UserException($"PayPal capture error: {(int)resp.StatusCode} {body}");
+                throw Failure("capture", resp, body);
 
             var data = JObject.Parse(body);
             var capture = data["purchase_units"]?[0]?["payments"]?["captures"]?[0]
@@ -174,11 +188,14 @@ namespace eDoktor.Services.PayPal
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
             object payload = amount.HasValue
-                ? new { amount = new { value = amount.Value.ToString("F2", CultureInfo.InvariantCulture), currency_code = "EUR" }, note_to_payer = reason }
+                ? new { amount = new { value = amount.Value.ToString("F2", CultureInfo.InvariantCulture), currency_code = _opts.Currency }, note_to_payer = reason }
                 : new { note_to_payer = reason };
             req.Content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
 
             var resp = await _http.SendAsync(req);
+            if (!resp.IsSuccessStatusCode)
+                _logger.LogError("PayPal refund of capture {CaptureId} failed: {Status} {Body}",
+                    captureId, (int)resp.StatusCode, await resp.Content.ReadAsStringAsync());
             return resp.IsSuccessStatusCode;
         }
     }
