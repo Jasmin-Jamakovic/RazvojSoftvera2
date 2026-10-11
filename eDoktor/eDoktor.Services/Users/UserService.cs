@@ -122,9 +122,9 @@ namespace eDoktor.Services.Users
         public async Task<LoginResponse> LoginAsync(LoginRequest req)
         {
             var u = await _db.Users.Include(x => x.Role).FirstOrDefaultAsync(x => x.Username == req.Username && !x.IsDeleted)
-                ?? throw new UserException("Invalid credentials");
+                ?? throw new UserException("Pogrešno korisničko ime ili lozinka.");
             if (!_hasher.Verify(req.Password, u.PasswordHash))
-                throw new UserException("Invalid credentials");
+                throw new UserException("Pogrešno korisničko ime ili lozinka.");
 
             return new LoginResponse { Token = _jwt.GenerateToken(u), User = Map(u, includeImage: true) };
         }
@@ -193,9 +193,9 @@ namespace eDoktor.Services.Users
 
         public async Task<bool> ChangePasswordAsync(int userId, ChangePasswordRequest req)
         {
-            var u = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId) ?? throw new UserException("User not found");
+            var u = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId) ?? throw new UserException("Korisnik nije pronađen.");
             if (!_hasher.Verify(req.OldPassword, u.PasswordHash))
-                throw new UserException("Old password is incorrect");
+                throw new UserException("Trenutna lozinka nije ispravna.");
             u.PasswordHash = _hasher.Hash(req.NewPassword);
             u.LastModifiedAt = System.DateTime.UtcNow;
             u.TokenVersion++; // invalidate existing sessions after a password change
@@ -276,7 +276,7 @@ namespace eDoktor.Services.Users
         // Server-side logout: bump the token version so all previously issued JWTs stop validating.
         public async Task LogoutAsync(int userId)
         {
-            var u = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId) ?? throw new UserException("User not found");
+            var u = await _db.Users.FirstOrDefaultAsync(x => x.Id == userId) ?? throw new UserException("Korisnik nije pronađen.");
             u.TokenVersion++;
             await _db.SaveChangesAsync();
         }

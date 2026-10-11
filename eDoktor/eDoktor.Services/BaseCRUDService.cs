@@ -35,7 +35,7 @@ namespace eDoktor.Services
         public virtual async Task<T> UpdateAsync(int id, TUpdate request){
             var entity = await _context.Set<TEntity>().FindAsync(id);
             if (entity == null){
-                throw new NotFoundException("Entity not found");
+                throw new NotFoundException("Traženi zapis ne postoji.");
             }
 
             MapUpdateToEntity(entity, request);

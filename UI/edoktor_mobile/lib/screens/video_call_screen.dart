@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../services/auth_store.dart';
 import '../theme/app_theme.dart';
 import '../widgets/consultation_chat.dart';
 
@@ -37,8 +38,17 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       _permissionsDenied = !granted;
       _ctrl = WebViewController(onPermissionRequest: (request) => request.grant())
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..loadRequest(Uri.parse(widget.joinUrl));
+        ..loadRequest(Uri.parse(_callUrl()));
     });
+  }
+
+  // Keep the call inside the app (otherwise Jitsi on a phone first offers to open its own app)
+  // and fill in the patient's name on Jitsi's join screen.
+  String _callUrl() {
+    final u = AuthStore.user;
+    final name = u == null ? '' : '${u.firstName} ${u.lastName}'.trim();
+    final config = ['config.disableDeepLinking=true', if (name.isNotEmpty) 'userInfo.displayName=${Uri.encodeComponent('"$name"')}'];
+    return '${widget.joinUrl}#${config.join('&')}';
   }
 
   void _toggleChat() => setState(() { _chatOpen = !_chatOpen; if (_chatOpen) _unread = 0; });

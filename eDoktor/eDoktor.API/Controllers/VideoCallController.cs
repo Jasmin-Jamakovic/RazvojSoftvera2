@@ -22,7 +22,7 @@ namespace eDoktor.API.Controllers
         [HttpPost("{appointmentId}/room")]
         public async Task<IActionResult> Room(int appointmentId)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             var (roomId, joinUrl) = await _svc.GetOrCreateRoomAsync(appointmentId, uid);
             return Ok(new { roomId, joinUrl });
         }

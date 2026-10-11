@@ -29,7 +29,7 @@ namespace eDoktor.API.Filters
                 context.HttpContext.Response.StatusCode = (int)HttpStatusCode.NotFound;
             }
             else{
-                context.ModelState.AddModelError("Error", "Server side error occured");
+                context.ModelState.AddModelError("Error", "Došlo je do greške na serveru. Pokušajte ponovo.");
                 context.HttpContext.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
             }
             var list = context.ModelState.Where(x => x.Value.Errors.Count > 0)

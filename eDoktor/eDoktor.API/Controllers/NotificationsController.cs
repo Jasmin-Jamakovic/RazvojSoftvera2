@@ -19,7 +19,7 @@ namespace eDoktor.API.Controllers
         [HttpGet]
         public async Task<PagedResult<NotificationResponse>> Get([FromQuery] NotificationSearchObject s)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             s ??= new();
             s.UserId = uid;
             return await _svc.GetAsync(s);
@@ -28,7 +28,7 @@ namespace eDoktor.API.Controllers
         [HttpPost("{id}/read")]
         public async Task<IActionResult> MarkRead(int id)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             var ok = await _svc.MarkAsReadAsync(id, uid);
             return ok ? Ok() : NotFound();
         }
@@ -36,7 +36,7 @@ namespace eDoktor.API.Controllers
         [HttpPost("read-all")]
         public async Task<IActionResult> MarkAllRead()
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             var n = await _svc.MarkAllAsReadAsync(uid);
             return Ok(new { marked = n });
         }

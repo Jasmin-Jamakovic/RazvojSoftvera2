@@ -110,7 +110,7 @@ namespace eDoktor.Services.PayPal
                 throw Failure("create order", resp, body);
 
             var data = JObject.Parse(body);
-            var orderId = (string?)data["id"] ?? throw new UserException("PayPal did not return an order id.");
+            var orderId = (string?)data["id"] ?? throw new UserException("PayPal nije vratio broj narudžbe. Pokušajte ponovo.");
             string? approveUrl = null;
             foreach (var l in data["links"] ?? new JArray())
             {
@@ -135,8 +135,8 @@ namespace eDoktor.Services.PayPal
 
             var data = JObject.Parse(body);
             var capture = data["purchase_units"]?[0]?["payments"]?["captures"]?[0]
-                ?? throw new UserException("PayPal did not return a capture.");
-            var captureId = (string?)capture["id"] ?? throw new UserException("PayPal did not return a capture id.");
+                ?? throw new UserException("PayPal nije potvrdio naplatu. Pokušajte ponovo.");
+            var captureId = (string?)capture["id"] ?? throw new UserException("PayPal nije vratio broj naplate. Pokušajte ponovo.");
             var status = (string?)capture["status"] ?? string.Empty;
             var value = decimal.TryParse((string?)capture["amount"]?["value"], NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : 0m;
             var currency = (string?)capture["amount"]?["currency_code"] ?? string.Empty;

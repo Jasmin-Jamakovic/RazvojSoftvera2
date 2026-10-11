@@ -29,7 +29,7 @@ namespace eDoktor.API.Controllers
         [HttpPost, Authorize(Roles = Roles.Patient)]
         public async Task<AppointmentResponse> Create(AppointmentCreateRequest req)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             return await _appts.CreateAsync(req, uid);
         }
 

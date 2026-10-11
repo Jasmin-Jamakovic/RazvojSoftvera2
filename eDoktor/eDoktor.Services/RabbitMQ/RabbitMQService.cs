@@ -33,12 +33,13 @@ namespace eDoktor.Services.RabbitMQ
                 UserName = Required("_rabbitMqUser"),
                 Password = Required("_rabbitMqPassword"),
                 Port = int.Parse(Required("_rabbitMqPort")),
-                DispatchConsumersAsync = false
+                DispatchConsumersAsync = false,
+                RequestedConnectionTimeout = TimeSpan.FromSeconds(5)
             };
         }
 
-        // Lazily open the connection/channel with exponential backoff so the API can boot
-        // before the broker is ready without blocking the startup thread. Caller holds _gate.
+        // Lazily open the connection/channel, retrying briefly (1s, 2s) so a broker that is just starting is
+        // picked up, while a request never waits long when the broker is down. Caller holds _gate.
         private async Task<IModel> EnsureChannelAsync()
         {
             if (_channel is { IsOpen: true }) return _channel;
@@ -54,17 +55,17 @@ namespace eDoktor.Services.RabbitMQ
                     _logger.LogInformation("Connected to RabbitMQ at {Host}:{Port}.", _factory.HostName, _factory.Port);
                     return _channel;
                 }
-                catch (Exception ex) when (attempt < 6)
+                catch (Exception ex) when (attempt < 3)
                 {
                     _logger.LogWarning(ex, "RabbitMQ connect attempt {Attempt} failed; retrying in {Delay}s.",
                         attempt, delay.TotalSeconds);
                     await Task.Delay(delay);
-                    delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 30));
+                    delay *= 2;
                 }
             }
         }
 
-        public async Task PublishAsync<T>(string queue, T message)
+        public async Task<bool> PublishAsync<T>(string queue, T message)
         {
             var body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(message));
             await _gate.WaitAsync();
@@ -77,6 +78,16 @@ namespace eDoktor.Services.RabbitMQ
                 var props = channel.CreateBasicProperties();
                 props.Persistent = true;
                 channel.BasicPublish(exchange: string.Empty, routingKey: queue, basicProperties: props, body: body);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // The broker closes the channel on errors; drop it so the next publish reconnects.
+                _logger.LogError(ex, "Publishing to queue '{Queue}' failed; the message was not sent.", queue);
+                _declaredQueues.Clear();
+                try { _channel?.Dispose(); } catch { /* channel already closed by the broker */ }
+                _channel = null;
+                return false;
             }
             finally
             {
@@ -84,7 +95,7 @@ namespace eDoktor.Services.RabbitMQ
             }
         }
 
-        public Task PublishEmailAsync(EmailMessage email) => PublishAsync(QueueNames.Email, email);
+        public Task<bool> PublishEmailAsync(EmailMessage email) => PublishAsync(QueueNames.Email, email);
 
         public void Dispose()
         {

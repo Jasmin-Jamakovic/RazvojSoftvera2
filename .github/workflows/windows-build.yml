@@ -1,0 +1,35 @@
+# Builds the admin desktop app for Windows (Flutter can only build Windows apps on Windows).
+# Download the result from the run's "Artifacts" section: edoktor_desktop-windows.zip
+name: Windows build (desktop)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'UI/edoktor_desktop/**'
+      - '.github/workflows/windows-build.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: UI/edoktor_desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.38.9
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter build windows --release --dart-define=API_BASE_URL=http://localhost:5190
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edoktor_desktop-windows
+          path: UI/edoktor_desktop/build/windows/x64/runner/Release/
+          if-no-files-found: error

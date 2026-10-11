@@ -13,6 +13,7 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 - [Features](#features)
 - [Getting Started](#getting-started)
 - [Credentials](#credentials)
+- [Configuration (.env)](#configuration-env)
 - [PayPal Sandbox](#paypal-sandbox)
 - [Doctor Recommendation System](#doctor-recommendation-system)
 - [Messaging (RabbitMQ)](#messaging-rabbitmq)
@@ -21,8 +22,8 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 
 ## Project Overview
 - Patients register/login on the **mobile app**, search doctors by specialization or name, book appointments from a calendar of available slots (in-person or online), pay with PayPal, attend video consultations, view their **electronic medical record** (visits, prescriptions, lab results), and receive real-time notifications.
-- Administrators use the **desktop app** to manage doctors, specializations, clinics, patients, appointments (including refunds for cancellations >24h before the start time), and view reports.
-- Doctors are managed accounts created by the admin; they can also log in to mark appointments as completed, add medical-record entries, and issue prescriptions.
+- Administrators use the **desktop app** to manage doctors, specializations, clinics, cities, patients, appointments and payments, and to view reports.
+- Doctors are managed accounts created by the admin (the temporary password is emailed to them). There is no separate doctor app: doctors use the API (Swagger) to confirm/complete appointments, add medical-record entries, issue prescriptions and chat during online consultations; the admin can do the appointment actions from the desktop app.
 
 ## Tech Stack
 - **Backend**: .NET 8 (`eDoktor.API`), Entity Framework Core, SQL Server 2022
@@ -32,7 +33,7 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 - **Auth**: JWT bearer tokens, BCrypt password hashing
 - **Real-time**: SignalR (push notifications to mobile clients)
 - **Payments**: PayPal Checkout REST API (Sandbox)
-- **Video calls**: Jitsi rooms (the API mints a room id per online appointment)
+- **Video calls**: Jitsi rooms on the public server `meet.ffmuc.net` (no sign-in needed; configurable via `VideoCall__BaseUrl`), the API mints a room id per online appointment
 - **Recommender**: in-process TF-IDF + cosine similarity, weighted by rating / distance / availability (see [below](#doctor-recommendation-system))
 - **Desktop app**: Flutter (Windows / macOS / Linux)
 - **Mobile app**: Flutter (Android primarily)
@@ -67,6 +68,28 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
   </tr>
 </table>
 
+## Features
+
+### Desktop app (administrator)
+- **Dashboard** with key numbers (doctors, patients, appointments, monthly revenue, top specialization and doctor) and revenue per doctor.
+- **Doctors**: CRUD with photo upload, phone, required email, specializations, clinic, price; per-doctor **working hours** that generate bookable time slots.
+- **Specializations, clinics, cities**: CRUD. A clinic's location is picked on an OpenStreetMap map or found from its address (geocoding through the API).
+- **Patients**: list and search; **patient details** with the full medical record (visits, prescriptions, lab results) and appointment history.
+- **Appointments**: filter by status, confirm, complete, **reschedule** to another free slot (with a reason), cancel (reason required, the patient is notified), refund. Each appointment has an **audit trail** (who created/confirmed/moved/completed/cancelled it, when and why).
+- **Payments**: all PayPal payments with filters, totals per status, manual refund.
+- **Reports**: doctor performance (period + specialization) and appointments (period + status); chart + table; download or print as PDF.
+
+### Mobile app (patient)
+- Registration, login, **password reset** with a code sent by email, change password, edit profile.
+- **Home** with personalized doctor recommendations and the reason for each one.
+- **Doctor search** by name and specialization, with filters (city, maximum price, minimum rating, free in the next 7 days).
+- **Doctor profile** with photo, bio, reviews; **booking from a calendar** (free / taken / selected days), in person or online.
+- **PayPal** payment in a WebView; **payment history**.
+- **Video consultation** (Jitsi) with an in-call **chat** that supports sending photos (camera/gallery, permissions requested at runtime).
+- **Medical record** (master–details): visits, prescriptions, lab results; **prescriptions and results as PDF**.
+- **Reviews** for completed appointments.
+- **Notifications** in real time (SignalR) and by email: booking, confirmation, cancellation, rescheduling, payment, new prescription, **reminders 24h and 1h** before the appointment.
+
 ## Project Structure
 
 ```
@@ -76,8 +99,10 @@ eDoktor/
   eDoktor.Services/        Domain services, EF Core context, recommender, state machine,
                            JWT, BCrypt, Redis cache, PayPal client, SignalR hub
   eDoktor.Worker/          RabbitMQ consumer (emails, etc.)
+  Dockerfile               Builds the API image (the Worker has its own Dockerfile in eDoktor.Worker/)
   docker-compose.yml       SQL Server, RabbitMQ, Redis, API, Worker
-  .env / .env.example      All secrets and connection strings
+  .env-tajne.zip           The real .env (password: fit)
+  .env.example             All configuration keys, without secrets
 UI/
   edoktor_desktop/         Flutter admin app
   edoktor_mobile/          Flutter patient app
@@ -93,26 +118,26 @@ UI/
 ### Backend
 ```bash
 cd eDoktor
-cp .env.example .env        # if you don't already have .env
-# (optional) edit PayPal credentials if you want to test live PayPal Sandbox
+unzip -P fit .env-tajne.zip   # creates eDoktor/.env (PayPal sandbox and SMTP already filled in)
 docker compose up --build
 ```
 
-This starts SQL Server, RabbitMQ, Redis, the API (port **5190**), and the Worker. The API auto-creates the database schema and seeds initial data (one admin, two patients, four doctors, four specializations, three clinics) on first boot.
+This starts SQL Server, RabbitMQ, Redis, the API (port **5190**), and the Worker. On first boot the API creates the database `210059` and seeds it: one admin, two patients, four doctors with photos, specializations, clinics, cities, free time slots for the coming days, appointments in every state, payments, reviews, medical records, prescriptions and lab results.
+
+To start again from an empty database: `docker compose down -v && docker compose up --build`.
 
 - Swagger UI: <http://localhost:5190/swagger>
 - RabbitMQ admin: <http://localhost:15672> (guest / guest)
 
-> The Worker degrades gracefully: if no SMTP credentials are configured, it logs emails to stdout instead of sending them. PayPal calls require `PayPal__ClientId` / `PayPal__ClientSecret` from the PayPal Developer dashboard.
+> Emails are sent through SMTP with the credentials from `.env`. If `_fromAddress` / `_password` are left empty (e.g. when starting from `.env.example`), the Worker writes the emails to its log instead of sending them.
 
 ### Desktop app
 ```bash
 cd UI/edoktor_desktop
 flutter pub get
-flutter run -d macos                # or windows / linux
-# To override the API base URL:
-flutter run -d macos --dart-define=API_BASE_URL=http://localhost:5190
+flutter run -d windows --dart-define=API_BASE_URL=http://localhost:5190   # or macos / linux
 ```
+The ready-made Windows build is in the GitHub Release (`fit-build-*.zip` → `Release/edoktor_desktop.exe`). Without `--dart-define` the app uses `http://localhost:5190`.
 
 ### Mobile app (Android emulator)
 ```bash
@@ -120,20 +145,43 @@ cd UI/edoktor_mobile
 flutter pub get
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5190
 ```
-`10.0.2.2` is the Android emulator's alias for the host machine.
+`10.0.2.2` is the Android emulator's alias for the host machine (also the default when no `--dart-define` is given).
+The ready-made APK is in the GitHub Release (`fit-build-*.zip` → `app-release.apk`): uninstall any old version from the emulator, then drag the APK onto it.
+
+Online consultations (Jitsi) and clinic maps (OpenStreetMap) need internet access on the device/emulator.
 
 ## Credentials
 All seeded accounts use password **`stringst`**.
 
-| Role     | Username           | Notes |
-|----------|--------------------|-------|
-| Admin    | `admin`            | Desktop app |
-| Patient  | `patient1`         | Mobile app, has location in Sarajevo |
-| Patient  | `patient2`         | Mobile app, has location in Banja Luka |
-| Doctor   | `doktor.mehic`     | Opća praksa, Klinika Centar Sarajevo |
-| Doctor   | `doktor.begic`     | Kardiologija, Klinika Centar Sarajevo |
-| Doctor   | `doktor.hodzic`    | Dermatologija, Poliklinika Ilidža |
-| Doctor   | `doktor.selimovic` | Neurologija, Poliklinika Banja Luka |
+| Context | Username | Password |
+|---|---|---|
+| Desktop app (admin) | `admin` | `stringst` |
+| Mobile app (patient, Sarajevo) | `patient1` | `stringst` |
+| Mobile app (patient, Banja Luka) | `patient2` | `stringst` |
+| Doctor (API / Swagger) | `doktor.mehic` (Opća praksa) | `stringst` |
+| Doctor (API / Swagger) | `doktor.begic` (Kardiologija) | `stringst` |
+| Doctor (API / Swagger) | `doktor.hodzic` (Dermatologija) | `stringst` |
+| Doctor (API / Swagger) | `doktor.selimovic` (Neurologija) | `stringst` |
+| PayPal sandbox buyer (in the payment WebView) | `TODO-sandbox-buyer@personal.example.com` | `TODO` |
+
+## Configuration (.env)
+Everything is configured through `eDoktor/.env` (read by `docker-compose.yml`); nothing is hard-coded or kept in `appsettings`. `.env.example` lists every key:
+
+| Keys | Purpose |
+|---|---|
+| `_saPassword`, `_source`, `_catalog`, `_sqlPort` | SQL Server (database `210059`) |
+| `_rabbitMqHost`, `_rabbitMqUser`, `_rabbitMqPassword`, `_rabbitMqPort` | RabbitMQ |
+| `Redis__ConnectionString` | Redis cache for recommendations |
+| `_fromAddress`, `_password`, `_host`, `_port`, `_enableSSL`, `_displayName`, `_timeout` | SMTP for the Worker |
+| `Jwt__Issuer`, `Jwt__Audience`, `Jwt__Key`, `Jwt__ExpiryMinutes` | JWT tokens |
+| `PayPal__ClientId`, `PayPal__ClientSecret`, `PayPal__BaseUrl`, `PayPal__Currency`, `PayPal__WebhookId`, `PayPal__ReturnUrl`, `PayPal__CancelUrl` | PayPal sandbox |
+| `Cors__AllowedOrigins` | Browser origins allowed to call the API |
+| `Swagger__Enabled` | Turns the Swagger UI on/off |
+| `App__TimeZone` | Time zone for times in notifications and emails (data is stored in UTC) |
+| `VideoCall__BaseUrl` | Jitsi server for online consultations |
+| `Geocoding__BaseUrl` | OpenStreetMap Nominatim, for clinic address → coordinates |
+
+The Flutter apps get the API address only through `--dart-define=API_BASE_URL=...`.
 
 ## PayPal Sandbox
 Get a Sandbox client id/secret at <https://developer.paypal.com>. Fill in the env vars:
@@ -144,11 +192,15 @@ PayPal__ClientSecret=...
 PayPal__BaseUrl=https://api-m.sandbox.paypal.com
 ```
 
-The mobile app opens the PayPal approval flow in a `WebView`. After approval, the app calls `/api/payments/paypal/orders/{orderId}/capture`, which marks the appointment as **Confirmed** and publishes a `payment.captured` RabbitMQ message.
+The mobile app opens the PayPal approval flow in a `WebView` and watches for the redirect to `PayPal__ReturnUrl` / `PayPal__CancelUrl`. After approval, the app calls `/api/payments/paypal/orders/{orderId}/capture`; the API checks with PayPal that the order is `COMPLETED` for the right amount, marks the appointment as **Confirmed** and publishes a `payment.captured` RabbitMQ message. If the patient leaves the PayPal page, the unfinished order is cancelled and the patient can pay again.
+
+Refunds: cancelling a paid appointment ≥24h before the start refunds it automatically; the admin can also refund from the **Payments** or **Appointments** screen.
 
 Payment is finalized **server-side**: the capture endpoint verifies the order with PayPal, and the `paypal/webhook` endpoint verifies PayPal's signature (using `PayPal__WebhookId`) before acting. To test the full payment flow, configure real PayPal Sandbox credentials in `.env`.
 
 ## Doctor Recommendation System
+Full documentation: [recommender-dokumentacija.md](recommender-dokumentacija.md).
+
 The recommender lives at `eDoktor.Services/Recommender/RecommenderService.cs` and produces personalized doctor rankings using **content-based filtering**.
 
 Formula:
@@ -170,13 +222,15 @@ The Worker (`eDoktor.Worker`) consumes:
 
 | Queue | Trigger | Effect |
 |---|---|---|
-| `email` | Any generic `EmailMessage` | Sends an email |
+| `email` | Appointment rescheduled, password-reset code | Sends the email |
 | `appointment.booked` | Patient books an appointment | Sends a confirmation email |
-| `appointment.cancelled` | Appointment cancelled | Sends a cancellation email; `ShouldRefund=true` if cancelled ≥24h before start while paid |
-| `appointment.reminder` | Reminder due (24h / 1h) | Sends a reminder email |
+| `appointment.cancelled` | Appointment cancelled | Sends a cancellation email; mentions the refund when one was made (the API refunds through PayPal before publishing) |
+| `appointment.reminder` | `AppointmentReminderService` in the API (checks every minute) finds an appointment 24h or 1h away | Sends a reminder email |
 | `payment.captured` | PayPal capture succeeded | Sends a receipt; appointment is also marked `Confirmed` |
 | `prescription.issued` | Doctor issues an e-prescription | Notifies the patient |
 | `doctor.created` | Admin creates a doctor account | Emails the doctor their temporary password |
+
+Queues are durable and messages persistent, so queued emails survive a broker restart. The Worker acknowledges a message only after it was handled; failed messages are retried with backoff.
 
 ## Real-time notifications (SignalR)
 The API exposes a hub at `/hubs/notifications` (JWT-authenticated; the mobile app passes the token via `?access_token=...`). The `NotificationService` writes a row to the `Notifications` table **and** pushes the event to the user's `user-{id}` SignalR group. The mobile app's `NotificationProvider` subscribes via `signalr_netcore` and refreshes the bell badge in real time.
@@ -186,14 +240,18 @@ Implemented in `eDoktor.Services/AppointmentStateMachine/`. States are stored as
 
 ```
    create
-  ┌──────►  Pending  ─── PayPal capture ──►  Confirmed  ─── doctor marks done ──►  Completed
+  ┌──────►  Pending  ─── PayPal capture / admin or doctor confirms ──►  Confirmed  ─── doctor/admin marks done ──►  Completed
   │            │                                  │
   │            └── cancel (server unbooks slot, no refund)
   │                                               │
-  │                                               └── cancel (≥24h before start + paid -> Worker refunds; <24h -> no refund)
+  │                                               └── cancel (≥24h before start + paid -> API refunds via PayPal; <24h -> no refund)
   │                                                                                 ↓
   └────────────────────────────────────────────────────────────────────────────► Cancelled
 ```
+
+**Rescheduling** (admin, `Pending` or `Confirmed`, before the start): the appointment moves to another free slot of the same doctor, the old slot is freed, and the patient is notified with the reason.
+
+Every transition runs in a transaction and records who did it and when (`ConfirmedAt/By`, `CompletedAt/By`, `CancelledAt/By` + reason, `RescheduledAt/By` + reason). The desktop app shows this as the appointment's history. Staff must give a reason when cancelling. Patients can act only on their own appointments, doctors only on theirs.
 
 A review can only be created against an appointment in `Completed` state, enforced in `ReviewService`.
 

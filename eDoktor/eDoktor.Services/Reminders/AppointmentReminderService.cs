@@ -82,7 +82,9 @@ namespace eDoktor.Services.Reminders
                     $"Vaš termin kod dr. {doctorName} je {when} ({DisplayTime.Format(a.TimeSlot.StartUtc)})"
                     + (a.Type == Database.Entities.AppointmentType.Online ? " – online konsultacija." : "."),
                     "appointment");
-                await rabbit.PublishAsync(QueueNames.AppointmentReminder, new AppointmentReminderMessage
+                // Marked as sent before publishing: if the email cannot be queued the in-app reminder still went out,
+                // so it is logged rather than retried (a retry would repeat the in-app notification).
+                var queued = await rabbit.PublishAsync(QueueNames.AppointmentReminder, new AppointmentReminderMessage
                 {
                     AppointmentId = a.Id,
                     PatientId = a.PatientId,
@@ -92,7 +94,8 @@ namespace eDoktor.Services.Reminders
                     StartUtc = a.TimeSlot.StartUtc,
                     Window = window
                 });
-                _logger.LogInformation("Sent {Window} reminder for appointment {AppointmentId}.", window, a.Id);
+                if (queued) _logger.LogInformation("Sent {Window} reminder for appointment {AppointmentId}.", window, a.Id);
+                else _logger.LogWarning("{Window} reminder for appointment {AppointmentId} was shown in the app, but its email could not be queued.", window, a.Id);
             }
         }
     }

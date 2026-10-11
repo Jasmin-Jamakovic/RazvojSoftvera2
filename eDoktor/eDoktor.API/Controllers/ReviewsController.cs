@@ -23,7 +23,7 @@ namespace eDoktor.API.Controllers
         [HttpPost]
         public async Task<ReviewResponse> Create(ReviewUpsertRequest req)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             return await _reviews.CreateAsync(req, uid);
         }
 

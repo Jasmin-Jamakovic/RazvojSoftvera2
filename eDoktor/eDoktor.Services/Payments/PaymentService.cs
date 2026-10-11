@@ -115,7 +115,7 @@ namespace eDoktor.Services.Payments
             if (role == Roles.Patient)
                 s.PatientId = await _current.GetUserIdAsync();
             else if (role != Roles.Admin)
-                throw new ForbiddenException("You are not allowed to view payments.");
+                throw new ForbiddenException("Nemate pristup uplatama.");
 
             var q = from p in _db.PayPalPayments
                     join a in _db.Appointments on p.AppointmentId equals a.Id
@@ -145,7 +145,7 @@ namespace eDoktor.Services.Payments
         public async Task<PayPalOrderResponse> CreateOrderAsync(PayPalCreateOrderRequest req)
         {
             var appt = await _db.Appointments.FirstOrDefaultAsync(a => a.Id == req.AppointmentId)
-                ?? throw new NotFoundException("Appointment not found");
+                ?? throw new NotFoundException("Termin nije pronađen.");
 
             await EnsureOwnerOrAdminAsync(appt.PatientId, "You can only pay for your own appointment.");
             if (appt.StateMachine != nameof(PendingAppointmentState))

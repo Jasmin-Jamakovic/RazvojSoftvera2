@@ -19,7 +19,7 @@ namespace eDoktor.API.Controllers
         [HttpGet("me")]
         public async Task<MedicalRecordResponse?> Me()
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             return await _svc.GetForPatientAsync(uid);
         }
 
@@ -29,14 +29,14 @@ namespace eDoktor.API.Controllers
         [HttpPost("entries"), Authorize(Roles = Roles.Doctor)]
         public async Task<MedicalRecordEntryResponse> AddEntry(MedicalRecordEntryUpsertRequest req)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             return await _svc.AddEntryAsync(req, uid);
         }
 
         [HttpPost("prescriptions"), Authorize(Roles = Roles.Doctor)]
         public async Task<PrescriptionResponse> AddPrescription(PrescriptionUpsertRequest req)
         {
-            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Not authenticated");
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
             return await _svc.AddPrescriptionAsync(req, uid);
         }
 

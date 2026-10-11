@@ -145,7 +145,7 @@ namespace eDoktor.Services.MedicalRecords
             if (entry.Appointment.Doctor.UserId != doctorUserId) throw new ForbiddenException("Samo ljekar ovog pregleda može izdati recept.");
 
             var existing = await _db.Prescriptions.FirstOrDefaultAsync(p => p.MedicalRecordEntryId == entry.Id);
-            if (existing != null) throw new UserException("Prescription already issued for this record entry");
+            if (existing != null) throw new UserException("Za ovaj zapis u kartonu recept je već izdat.");
 
             var p = new Prescription
             {

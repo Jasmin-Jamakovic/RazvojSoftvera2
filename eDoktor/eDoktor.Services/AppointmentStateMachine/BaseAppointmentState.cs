@@ -61,16 +61,16 @@ namespace eDoktor.Services.AppointmentStateMachine
         }
 
         public virtual Task<AppointmentResponse> CreateAsync(AppointmentCreateRequest req, int patientId)
-            => throw new UserException("Cannot create from current state");
+            => throw new UserException("Termin se ne može zakazati u trenutnom stanju.");
 
         public virtual Task<AppointmentResponse> ConfirmAsync(int id)
-            => throw new UserException("Cannot confirm from current state");
+            => throw new UserException("Termin se ne može potvrditi u trenutnom stanju.");
 
         public virtual Task<AppointmentResponse> CompleteAsync(int id)
-            => throw new UserException("Cannot complete from current state");
+            => throw new UserException("Termin se ne može završiti u trenutnom stanju.");
 
         public virtual Task<AppointmentResponse> CancelAsync(int id, string? reason)
-            => throw new UserException("Cannot cancel from current state");
+            => throw new UserException("Termin se ne može otkazati u trenutnom stanju.");
 
         public virtual Task<AppointmentResponse> RescheduleAsync(int id, int newTimeSlotId, string reason)
             => throw new UserException("Samo zakazani ili potvrđeni termini mogu biti pomjereni.");
@@ -157,7 +157,7 @@ namespace eDoktor.Services.AppointmentStateMachine
             nameof(ConfirmedAppointmentState) => _serviceProvider.GetRequiredService<ConfirmedAppointmentState>(),
             nameof(CompletedAppointmentState) => _serviceProvider.GetRequiredService<CompletedAppointmentState>(),
             nameof(CancelledAppointmentState) => _serviceProvider.GetRequiredService<CancelledAppointmentState>(),
-            _ => throw new UserException($"Unknown state {name}")
+            _ => throw new UserException($"Nepoznato stanje termina: {name}")
         };
     }
 }

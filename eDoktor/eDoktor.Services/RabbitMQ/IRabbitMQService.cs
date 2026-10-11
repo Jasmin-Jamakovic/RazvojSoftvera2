@@ -5,7 +5,9 @@ namespace eDoktor.Services.RabbitMQ
 {
     public interface IRabbitMQService
     {
-        Task PublishAsync<T>(string queue, T message);
-        Task PublishEmailAsync(EmailMessage email);
+        // Messages are published after the data is committed, so a broker failure must not fail the request:
+        // it is logged and reported as false.
+        Task<bool> PublishAsync<T>(string queue, T message);
+        Task<bool> PublishEmailAsync(EmailMessage email);
     }
 }

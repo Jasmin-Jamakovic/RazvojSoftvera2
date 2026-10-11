@@ -37,7 +37,7 @@ namespace eDoktor.API.Controllers
 
         [HttpPost("paypal/captures/{captureId}/refund"), Authorize(Roles = Roles.Admin)]
         public async Task<IActionResult> Refund(string captureId, PayPalRefundRequest req)
-            => await _payments.RefundAsync(captureId, req.Reason) ? Ok() : BadRequest("Refund failed");
+            => await _payments.RefundAsync(captureId, req.Reason) ? Ok() : BadRequest("Povrat sredstava nije uspio. Pokušajte ponovo.");
 
         [HttpPost("paypal/webhook"), AllowAnonymous]
         public async Task<IActionResult> Webhook()

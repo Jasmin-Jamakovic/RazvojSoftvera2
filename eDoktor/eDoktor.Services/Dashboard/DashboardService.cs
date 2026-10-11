@@ -19,15 +19,18 @@ namespace eDoktor.Services.Dashboard
             var totalDoctors = await _db.Doctors.CountAsync(d => !d.IsDeleted);
             var totalPatients = await _db.Users.CountAsync(u => !u.IsDeleted && u.Role.Name == Roles.Patient);
             var totalAppointments = await _db.Appointments.CountAsync();
-            var today = DateTime.UtcNow.Date;
-            var appointmentsToday = await _db.Appointments.CountAsync(a => a.TimeSlot.StartUtc >= today && a.TimeSlot.StartUtc < today.AddDays(1));
+            // "Today" and the month are the clinic's local calendar, converted to UTC bounds for the queries.
+            var localToday = DisplayTime.ToLocal(DateTime.UtcNow).Date;
+            var todayStart = DisplayTime.ToUtc(localToday);
+            var todayEnd = DisplayTime.ToUtc(localToday.AddDays(1));
+            var appointmentsToday = await _db.Appointments.CountAsync(a => a.TimeSlot.StartUtc >= todayStart && a.TimeSlot.StartUtc < todayEnd);
 
-            var y = year ?? DateTime.UtcNow.Year;
-            var m = month ?? DateTime.UtcNow.Month;
+            var y = year ?? localToday.Year;
+            var m = month ?? localToday.Month;
             if (m < 1 || m > 12 || y < 2000 || y > 2100)
                 throw new UserException("Neispravan mjesec ili godina.");
-            var monthStart = new DateTime(y, m, 1);
-            var monthEnd = monthStart.AddMonths(1);
+            var monthStart = DisplayTime.ToUtc(new DateTime(y, m, 1));
+            var monthEnd = DisplayTime.ToUtc(new DateTime(y, m, 1).AddMonths(1));
 
             var monthlyRevenue = await _db.PayPalPayments
                 .Where(p => p.Status == PaymentStatus.Captured && p.CapturedAt >= monthStart && p.CapturedAt < monthEnd)

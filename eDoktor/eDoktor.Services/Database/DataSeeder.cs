@@ -11,15 +11,22 @@ namespace eDoktor.Services.Database
 {
     public static class DataSeeder
     {
-        private static byte[] Img(string b64) => Convert.FromBase64String(b64);
+        // Avatar PNGs embedded in this assembly (Database/SeedImages), so image-bearing entities have images
+        // in the seed (spec §3.1: "Seed mora sadržavati i slike ako domena koristi slike").
+        private static byte[] Img(string name)
+        {
+            using var stream = typeof(DataSeeder).Assembly.GetManifestResourceStream($"SeedImages/{name}.png")
+                ?? throw new InvalidOperationException($"Seed image '{name}' is missing.");
+            using var ms = new System.IO.MemoryStream();
+            stream.CopyTo(ms);
+            return ms.ToArray();
+        }
 
-        // Small placeholder avatar PNGs so image-bearing entities actually have images in the seed
-        // (spec §3.1: "Seed mora sadržavati i slike ako domena koristi slike").
-        private static readonly byte[] Doc1Photo = Img("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAAjklEQVR42u3QMQ0AAAgDsKlBI7pQiANOriZV0FQPhygQJEiQIEGCBAlCkCBBggQJEiQIQYIECRIkSJAgBAkSJEiQIEGCBCFIkCBBggQJEoQgQYIECRIkSBCCBAkSJEiQIEGCECRIkCBBggQJQpAgQYIECRIkCEGCBAkSJEiQIEEIEiRIkCBBggQhSJCgPwvJYkLCdcNzzwAAAABJRU5ErkJggg==");
-        private static readonly byte[] Doc2Photo = Img("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAAjElEQVR42u3QMQ0AAAgDsEmbenThgJOrSRU003KIAkGCBAkSJEiQIAQJEiRIkCBBghAkSJAgQYIECUKQIEGCBAkSJEgQggQJEiRIkCBBCBIkSJAgQYIEIUiQIEGCBAkSJAhBggQJEiRIkCAECRIkSJAgQYIQJEiQIEGCBAkShCBBggQJEiRIEIIECfqzXGPapBrSMlIAAAAASUVORK5CYII=");
-        private static readonly byte[] Doc3Photo = Img("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAAjklEQVR42u3QMQ0AAAgDsMlCC8LQiwNOriZV0NQ0hygQJEiQIEGCBAlCkCBBggQJEiQIQYIECRIkSJAgBAkSJEiQIEGCBCFIkCBBggQJEoQgQYIECRIkSBCCBAkSJEiQIEGCECRIkCBBggQJQpAgQYIECRIkCEGCBAkSJEiQIEEIEiRIkCBBggQhSJCgPwvVI6JolHd5/AAAAABJRU5ErkJggg==");
-        private static readonly byte[] Doc4Photo = Img("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAAjklEQVR42u3QMQ0AAAgDsElFFUoQiANOriZV0HQNhygQJEiQIEGCBAlCkCBBggQJEiQIQYIECRIkSJAgBAkSJEiQIEGCBCFIkCBBggQJEoQgQYIECRIkSBCCBAkSJEiQIEGCECRIkCBBggQJQpAgQYIECRIkCEGCBAkSJEiQIEEIEiRIkCBBggQhSJCgPwvzy+t2hfigfwAAAABJRU5ErkJggg==");
-        private static readonly byte[] PatientPhoto = Img("iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAAjklEQVR42u3QMQ0AAAgDsOlEBCJQjgNOriZV0FQPhygQJEiQIEGCBAlCkCBBggQJEiQIQYIECRIkSJAgBAkSJEiQIEGCBCFIkCBBggQJEoQgQYIECRIkSBCCBAkSJEiQIEGCECRIkCBBggQJQpAgQYIECRIkCEGCBAkSJEiQIEEIEiRIkCBBggQhSJCgPwusP2qzFk0RFQAAAABJRU5ErkJggg==");
+        private static readonly byte[] Doc1Photo = Img("doctor1");
+        private static readonly byte[] Doc2Photo = Img("doctor2");
+        private static readonly byte[] Doc3Photo = Img("doctor3");
+        private static readonly byte[] Doc4Photo = Img("doctor4");
+        private static readonly byte[] PatientPhoto = Img("patient1");
 
         // Runs after EnsureCreated. Idempotent: only inserts what is missing.
         // Uses real BCrypt hashes so the seeded "stringst" credentials actually work.
@@ -83,15 +90,19 @@ namespace eDoktor.Services.Database
             var dDerma = doctors[2];
             var dNeuro = doctors[3];
 
-            var today = DateTime.UtcNow.Date;
+            // Dates are the clinic's local calendar days; slot times are local working hours stored as UTC.
+            var today = DisplayTime.ToLocal(DateTime.UtcNow).Date;
 
             // Medical records (one per patient).
             var mr1 = new MedicalRecord { Patient = patient1, CreatedAt = today.AddMonths(-6) };
             var mr2 = new MedicalRecord { Patient = patient2, CreatedAt = today.AddMonths(-4) };
 
             // Helper to build a booked slot for an appointment.
-            TimeSlot BookedSlot(Doctor doc, DateTime startUtc) =>
-                new() { Doctor = doc, StartUtc = startUtc, EndUtc = startUtc.AddMinutes(30), IsBooked = true };
+            TimeSlot BookedSlot(Doctor doc, DateTime localStart)
+            {
+                var startUtc = DisplayTime.ToUtc(localStart);
+                return new() { Doctor = doc, StartUtc = startUtc, EndUtc = startUtc.AddMinutes(30), IsBooked = true };
+            }
 
             // ---- Completed appointment #1: patient1 + cardiologist (25 days ago) ----
             var apt1 = new Appointment
@@ -277,7 +288,7 @@ namespace eDoktor.Services.Database
                     if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday) continue;
                     foreach (var hour in new[] { 9, 10, 11, 13, 14 })
                     {
-                        var start = date.AddHours(hour);
+                        var start = DisplayTime.ToUtc(date.AddHours(hour));
                         freeSlots.Add(new TimeSlot { Doctor = doc, StartUtc = start, EndUtc = start.AddMinutes(30), IsBooked = false });
                     }
                 }

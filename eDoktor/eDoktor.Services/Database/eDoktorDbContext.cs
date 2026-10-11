@@ -30,6 +30,22 @@ namespace eDoktor.Services.Database
         public DbSet<ConsultationMessage> ConsultationMessages { get; set; } = null!;
         public DbSet<SearchHistory> SearchHistories { get; set; } = null!;
 
+        // All times are stored in UTC, but SQL Server returns them without a kind, so they would be sent to the
+        // apps without the "Z" suffix and shown as if they were local time. Mark them as UTC when reading.
+        protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+        {
+            configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+            configurationBuilder.Properties<DateTime?>().HaveConversion<UtcDateTimeConverter>();
+        }
+
+        private class UtcDateTimeConverter : Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<DateTime, DateTime>
+        {
+            public UtcDateTimeConverter() : base(
+                v => v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : v,
+                v => DateTime.SpecifyKind(v, DateTimeKind.Utc))
+            { }
+        }
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
