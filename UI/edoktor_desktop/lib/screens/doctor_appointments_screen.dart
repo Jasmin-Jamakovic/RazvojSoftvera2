@@ -41,6 +41,8 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
         status: _status,
         from: _period == _Period.upcoming ? now : null,
         to: _period == _Period.past ? now : null,
+        // Upcoming: nearest appointment first.
+        sortAscending: _period == _Period.upcoming,
         page: _page, pageSize: _pageSize,
       );
     });

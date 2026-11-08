@@ -27,7 +27,7 @@ class ReportPdf {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('eDoktor', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColor.fromInt(0xFF2E7D32))),
+              pw.Text('eDoktor', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF2E7D32))),
               pw.Text('Generisano: ${_date.format(DateTime.now())}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600)),
             ],
           ),
@@ -176,7 +176,7 @@ class ReportPdf {
 
   static pw.Widget _kpi(String label, String value) => pw.Container(
         padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: pw.BoxDecoration(color: PdfColor.fromInt(0xFFF2F5F9), borderRadius: pw.BorderRadius.circular(4)),
+        decoration: pw.BoxDecoration(color: const PdfColor.fromInt(0xFFF2F5F9), borderRadius: pw.BorderRadius.circular(4)),
         child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
           pw.Text(label, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
           pw.Text(value, style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),

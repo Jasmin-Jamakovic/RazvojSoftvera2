@@ -233,10 +233,10 @@ class MedicalRecordProvider extends ChangeNotifier {
 
 class AppointmentProvider extends ChangeNotifier {
   /// One page of appointments (for a doctor the API returns only their own).
-  Future<PagedList<Appointment>> list({String? status, DateTime? from, DateTime? to, int page = 0, int pageSize = 20}) async {
+  Future<PagedList<Appointment>> list({String? status, DateTime? from, DateTime? to, bool sortAscending = false, int page = 0, int pageSize = 20}) async {
     final res = await ApiClient.get('/api/appointments', query: {
       'status': status, 'from': from?.toUtc().toIso8601String(), 'to': to?.toUtc().toIso8601String(),
-      'page': page, 'pageSize': pageSize,
+      'sortAscending': sortAscending, 'page': page, 'pageSize': pageSize,
     });
     final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
     return PagedList(items, res['totalCount'] ?? items.length);

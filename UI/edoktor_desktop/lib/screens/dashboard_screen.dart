@@ -30,7 +30,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _stat('Pacijenata', '${d.totalPatients}', Icons.people),
           _stat('Termini ukupno', '${d.totalAppointments}', Icons.event_available),
           _stat('Termini danas', '${d.appointmentsToday}', Icons.today),
-          _stat('Prihod (mjesec)', '${NumberFormat.currency(symbol: '€', decimalDigits: 0).format(d.revenueThisMonth)}', Icons.euro),
+          _stat('Prihod (mjesec)', NumberFormat.currency(symbol: '€', decimalDigits: 0).format(d.revenueThisMonth), Icons.euro),
           _stat('Top specijalizacija', d.topSpecialization ?? '-', Icons.star),
           _stat('Najbolji ljekar', '${d.topDoctor ?? "-"} (${d.topDoctorRating.toStringAsFixed(1)})', Icons.emoji_events),
         ]),
@@ -44,7 +44,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               BarChartGroupData(x: i, barRods: [BarChartRodData(toY: d.rows[i].revenue, color: const Color(0xFF2E7D32), width: 22)])
           ],
           titlesData: FlTitlesData(
-            leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 48)),
+            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 48)),
             bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28, getTitlesWidget: (v, _) {
               final i = v.toInt(); if (i < 0 || i >= d.rows.length) return const SizedBox();
               return Padding(padding: const EdgeInsets.only(top: 6), child: Text(d.rows[i].doctorName.split(' ').last, style: const TextStyle(fontSize: 10)));

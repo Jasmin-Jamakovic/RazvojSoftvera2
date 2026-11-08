@@ -55,7 +55,7 @@ namespace eDoktor.Services.Appointments
             if (s.From.HasValue) q = q.Where(a => a.TimeSlot.StartUtc >= s.From.Value);
             if (s.To.HasValue) q = q.Where(a => a.TimeSlot.StartUtc <= s.To.Value);
 
-            q = q.OrderByDescending(a => a.TimeSlot.StartUtc);
+            q = s.SortAscending ? q.OrderBy(a => a.TimeSlot.StartUtc) : q.OrderByDescending(a => a.TimeSlot.StartUtc);
 
             s.Normalize();
             int? total = s.IncludeTotalCount ? await q.CountAsync() : null;

@@ -9,5 +9,7 @@ namespace eDoktor.Model.SearchObjects
         public string? Status { get; set; }
         public DateTime? From { get; set; }
         public DateTime? To { get; set; }
+        /// Oldest first (e.g. upcoming appointments, nearest first). Default: newest first.
+        public bool SortAscending { get; set; }
     }
 }

@@ -1,0 +1,40 @@
+# Builds the patient mobile app as a release APK for the Android emulator (10.0.2.2 = the host machine).
+# Download the result from the run's "Artifacts" section: edoktor_mobile-apk.zip -> app-release.apk
+name: Android build (mobile)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'UI/edoktor_mobile/**'
+      - '.github/workflows/android-build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: UI/edoktor_mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.38.9
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter build apk --release --dart-define=API_BASE_URL=http://10.0.2.2:5190
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: edoktor_mobile-apk
+          path: UI/edoktor_mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
