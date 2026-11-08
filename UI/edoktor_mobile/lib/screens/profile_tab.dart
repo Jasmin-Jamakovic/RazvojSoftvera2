@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/notification_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ui.dart';
 import 'change_password_screen.dart';
@@ -14,7 +15,9 @@ class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
 
   Future<void> _logout(BuildContext context) async {
-    await context.read<AuthProvider>().logout();
+    final auth = context.read<AuthProvider>();
+    await context.read<NotificationProvider>().disconnect();
+    await auth.logout();
     if (context.mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
   }
 
@@ -90,13 +93,22 @@ class ProfileTab extends StatelessWidget {
     ]);
   }
 
+  // The decoded photo is memoized by its base64 string so build() doesn't re-decode it on every rebuild.
+  static String? _avatarKey;
+  static ImageProvider? _avatarImage;
+
   ImageProvider? _avatar(String? b64) {
     if (b64 == null || b64.isEmpty) return null;
+    if (b64 == _avatarKey) return _avatarImage;
+    ImageProvider? image;
     try {
-      return MemoryImage(base64Decode(b64));
-    } catch (_) {
-      return null;
+      image = MemoryImage(base64Decode(b64));
+    } catch (e) {
+      debugPrint('Invalid profile image: $e');
     }
+    _avatarKey = b64;
+    _avatarImage = image;
+    return image;
   }
 }
 

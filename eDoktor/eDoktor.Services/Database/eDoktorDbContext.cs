@@ -11,6 +11,7 @@ namespace eDoktor.Services.Database
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<Role> Roles { get; set; } = null!;
         public DbSet<Specialization> Specializations { get; set; } = null!;
+        public DbSet<Country> Countries { get; set; } = null!;
         public DbSet<City> Cities { get; set; } = null!;
         public DbSet<Clinic> Clinics { get; set; } = null!;
         public DbSet<Doctor> Doctors { get; set; } = null!;
@@ -55,6 +56,12 @@ namespace eDoktor.Services.Database
             modelBuilder.Entity<Role>().HasIndex(r => r.Name).IsUnique();
             modelBuilder.Entity<Specialization>().HasIndex(s => s.Name).IsUnique();
             modelBuilder.Entity<City>().HasIndex(c => c.Name).IsUnique();
+            modelBuilder.Entity<Country>().HasIndex(c => c.Name).IsUnique();
+
+            modelBuilder.Entity<City>()
+                .HasOne(c => c.Country).WithMany(c => c.Cities)
+                .HasForeignKey(c => c.CountryId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<ConsultationMessage>()
                 .HasOne(m => m.Appointment)
@@ -156,11 +163,11 @@ namespace eDoktor.Services.Database
             modelBuilder.Entity<Appointment>().HasOne(a => a.CancelledBy).WithMany().HasForeignKey(a => a.CancelledById).OnDelete(DeleteBehavior.Restrict);
             modelBuilder.Entity<Appointment>().HasOne(a => a.RescheduledBy).WithMany().HasForeignKey(a => a.RescheduledById).OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<Appointment>()
-                .HasOne(a => a.Payment)
-                .WithOne()
-                .HasForeignKey<Appointment>(a => a.PayPalPaymentId)
-                .OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<PayPalPayment>()
+                .HasOne(p => p.Appointment)
+                .WithMany(a => a.Payments)
+                .HasForeignKey(p => p.AppointmentId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Review>()
                 .HasOne(r => r.Doctor)
@@ -219,6 +226,13 @@ namespace eDoktor.Services.Database
                 .HasForeignKey(l => l.MedicalRecordId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<LabResult>()
+                .HasOne(l => l.CreatedBy).WithMany()
+                .HasForeignKey(l => l.CreatedById)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MedicalRecordEntry>().HasIndex(e => e.AppointmentId).IsUnique();
+
             modelBuilder.Entity<Notification>()
                 .HasOne(n => n.User)
                 .WithMany(u => u.Notifications)
@@ -245,24 +259,44 @@ namespace eDoktor.Services.Database
                 new Specialization { Id = 1, Name = "Opća praksa", Description = "Porodična medicina i opća praksa", IsDeleted = false },
                 new Specialization { Id = 2, Name = "Kardiologija", Description = "Bolesti srca i krvnih sudova", IsDeleted = false },
                 new Specialization { Id = 3, Name = "Dermatologija", Description = "Bolesti kože, kose i noktiju", IsDeleted = false },
-                new Specialization { Id = 4, Name = "Neurologija", Description = "Bolesti nervnog sistema", IsDeleted = false }
+                new Specialization { Id = 4, Name = "Neurologija", Description = "Bolesti nervnog sistema", IsDeleted = false },
+                new Specialization { Id = 5, Name = "Pedijatrija", Description = "Zdravlje djece i adolescenata", IsDeleted = false },
+                new Specialization { Id = 6, Name = "Ortopedija", Description = "Bolesti i povrede kostiju, zglobova i mišića", IsDeleted = false },
+                new Specialization { Id = 7, Name = "Oftalmologija", Description = "Bolesti oka i vida", IsDeleted = false },
+                new Specialization { Id = 8, Name = "Ginekologija", Description = "Reproduktivno zdravlje žena", IsDeleted = false }
+            );
+
+            modelBuilder.Entity<Country>().HasData(
+                new Country { Id = 1, Name = "Bosna i Hercegovina", IsDeleted = false },
+                new Country { Id = 2, Name = "Hrvatska", IsDeleted = false },
+                new Country { Id = 3, Name = "Srbija", IsDeleted = false },
+                new Country { Id = 4, Name = "Crna Gora", IsDeleted = false },
+                new Country { Id = 5, Name = "Slovenija", IsDeleted = false }
             );
 
             modelBuilder.Entity<City>().HasData(
-                new City { Id = 1, Name = "Sarajevo", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 2, Name = "Banja Luka", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 3, Name = "Mostar", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 4, Name = "Tuzla", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 5, Name = "Zenica", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 6, Name = "Bihać", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 7, Name = "Brčko", Country = "Bosna i Hercegovina", IsDeleted = false },
-                new City { Id = 8, Name = "Trebinje", Country = "Bosna i Hercegovina", IsDeleted = false }
+                new City { Id = 1, Name = "Sarajevo", CountryId = 1, IsDeleted = false },
+                new City { Id = 2, Name = "Banja Luka", CountryId = 1, IsDeleted = false },
+                new City { Id = 3, Name = "Mostar", CountryId = 1, IsDeleted = false },
+                new City { Id = 4, Name = "Tuzla", CountryId = 1, IsDeleted = false },
+                new City { Id = 5, Name = "Zenica", CountryId = 1, IsDeleted = false },
+                new City { Id = 6, Name = "Bihać", CountryId = 1, IsDeleted = false },
+                new City { Id = 7, Name = "Brčko", CountryId = 1, IsDeleted = false },
+                new City { Id = 8, Name = "Trebinje", CountryId = 1, IsDeleted = false },
+                new City { Id = 9, Name = "Zagreb", CountryId = 2, IsDeleted = false },
+                new City { Id = 10, Name = "Split", CountryId = 2, IsDeleted = false },
+                new City { Id = 11, Name = "Beograd", CountryId = 3, IsDeleted = false },
+                new City { Id = 12, Name = "Novi Sad", CountryId = 3, IsDeleted = false },
+                new City { Id = 13, Name = "Podgorica", CountryId = 4, IsDeleted = false },
+                new City { Id = 14, Name = "Ljubljana", CountryId = 5, IsDeleted = false }
             );
 
             modelBuilder.Entity<Clinic>().HasData(
                 new Clinic { Id = 1, Name = "Klinika Centar Sarajevo", Address = "Maršala Tita 12", CityId = 1, Latitude = 43.8563, Longitude = 18.4131, IsDeleted = false },
                 new Clinic { Id = 2, Name = "Poliklinika Ilidža", Address = "Hrasnička cesta 3", CityId = 1, Latitude = 43.8278, Longitude = 18.3107, IsDeleted = false },
-                new Clinic { Id = 3, Name = "Poliklinika Banja Luka", Address = "Vidovdanska 5", CityId = 2, Latitude = 44.7722, Longitude = 17.1910, IsDeleted = false }
+                new Clinic { Id = 3, Name = "Poliklinika Banja Luka", Address = "Vidovdanska 5", CityId = 2, Latitude = 44.7722, Longitude = 17.1910, IsDeleted = false },
+                new Clinic { Id = 4, Name = "Dom zdravlja Mostar", Address = "Kralja Tvrtka 9", CityId = 3, Latitude = 43.3438, Longitude = 17.8078, IsDeleted = false },
+                new Clinic { Id = 5, Name = "Poliklinika Tuzla", Address = "Turalibegova 20", CityId = 4, Latitude = 44.5384, Longitude = 18.6671, IsDeleted = false }
             );
 
             // Users, Doctors, DoctorSpecializations, MedicalRecords are seeded at runtime

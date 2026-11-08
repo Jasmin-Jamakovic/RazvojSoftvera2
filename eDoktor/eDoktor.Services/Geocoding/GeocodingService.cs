@@ -50,7 +50,7 @@ namespace eDoktor.Services.Geocoding
             var parts = new List<string> { address.Trim() };
             if (cityId.HasValue)
             {
-                var city = await _db.Cities.Where(c => c.Id == cityId.Value).Select(c => new { c.Name, c.Country }).FirstOrDefaultAsync()
+                var city = await _db.Cities.Where(c => c.Id == cityId.Value).Select(c => new { c.Name, Country = c.Country.Name }).FirstOrDefaultAsync()
                     ?? throw new NotFoundException("Odabrani grad ne postoji.");
                 parts.Add(city.Name);
                 if (!string.IsNullOrWhiteSpace(city.Country)) parts.Add(city.Country);

@@ -5,6 +5,7 @@ import '../models/entities.dart';
 import '../providers/providers.dart';
 import '../utils/labels.dart';
 import '../utils/validators.dart';
+import '../widgets/refund_dialog.dart';
 import '../widgets/reschedule_dialog.dart';
 
 class AppointmentsScreen extends StatefulWidget {
@@ -87,9 +88,10 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
   }
 
   Future<void> _refund(Appointment a, String captureId) async {
-    if (!await _confirm('Povrat sredstava', 'Izvršiti povrat sredstava za ovaj termin? Ova akcija je nepovratna.', action: 'Izvrši povrat', danger: true)) return;
-    if (!mounted) return;
-    await _run(() => context.read<PaymentProvider>().refund(captureId), 'Povrat sredstava je izvršen.');
+    final reason = await showRefundReasonDialog(context,
+        message: 'Vratiti ${a.price.toStringAsFixed(2)} € pacijentu ${a.patientName ?? ''} putem PayPal-a? Ova akcija je nepovratna.');
+    if (reason == null || !mounted) return;
+    await _run(() => context.read<PaymentProvider>().refund(captureId, reason: reason), 'Povrat sredstava je izvršen.');
   }
 
   Future<void> _reschedule(Appointment a) async {

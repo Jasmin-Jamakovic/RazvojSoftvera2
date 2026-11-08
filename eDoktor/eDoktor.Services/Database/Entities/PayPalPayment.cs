@@ -10,6 +10,8 @@ namespace eDoktor.Services.Database.Entities
         public int Id { get; set; }
 
         public int AppointmentId { get; set; }
+        [ForeignKey(nameof(AppointmentId))]
+        public virtual Appointment Appointment { get; set; } = null!;
 
         [Required]
         [MaxLength(100)]

@@ -51,8 +51,9 @@ namespace eDoktor.Services.Dashboard
                         ? d.Reviews.Where(r => !r.IsDeleted).Average(r => (double)r.Rating)
                         : 0,
                     Revenue = d.Appointments
-                        .Where(a => a.Payment != null && a.Payment.Status == PaymentStatus.Captured)
-                        .Sum(a => (decimal?)a.Payment!.Amount) ?? 0m
+                        .SelectMany(a => a.Payments)
+                        .Where(p => p.Status == PaymentStatus.Captured)
+                        .Sum(p => (decimal?)p.Amount) ?? 0m
                 })
                 .OrderByDescending(x => x.Revenue)
                 .ToListAsync();
@@ -112,9 +113,9 @@ namespace eDoktor.Services.Dashboard
                         ? d.Reviews.Where(r => !r.IsDeleted).Average(r => (double)r.Rating)
                         : 0,
                     Revenue = d.Appointments
-                        .Where(a => a.Payment != null && a.Payment.Status == PaymentStatus.Captured
-                            && a.Payment.CapturedAt >= from && a.Payment.CapturedAt < to)
-                        .Sum(a => (decimal?)a.Payment!.Amount) ?? 0m
+                        .SelectMany(a => a.Payments)
+                        .Where(p => p.Status == PaymentStatus.Captured && p.CapturedAt >= from && p.CapturedAt < to)
+                        .Sum(p => (decimal?)p.Amount) ?? 0m
                 })
                 .OrderByDescending(r => r.AppointmentCount)
                 .ThenByDescending(r => r.Revenue)

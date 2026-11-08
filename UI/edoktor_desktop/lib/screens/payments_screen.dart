@@ -6,7 +6,7 @@ import '../models/entities.dart';
 import '../providers/providers.dart';
 import '../services/report_pdf.dart';
 import '../utils/labels.dart';
-import '../utils/validators.dart';
+import '../widgets/refund_dialog.dart';
 
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
@@ -99,31 +99,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Future<void> _refund(Payment p) async {
-    final formKey = GlobalKey<FormState>();
-    final reason = TextEditingController();
-    final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
-      title: Row(children: [
-        const Expanded(child: Text('Povrat sredstava')),
-        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: () => Navigator.pop(c, false)),
-      ]),
-      content: SizedBox(width: 420, child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Vratiti ${_money.format(p.amount)} pacijentu ${p.patientName ?? ''} putem PayPal-a? Ova akcija je nepovratna.'),
-        const SizedBox(height: 12),
-        TextFormField(controller: reason, autovalidateMode: AutovalidateMode.onUserInteraction, maxLines: 2,
-          decoration: const InputDecoration(labelText: 'Razlog povrata'),
-          validator: (v) => Validators.requiredMax(v, 200, 'Razlog povrata')),
-      ]))),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Odustani')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red),
-          onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(c, true); },
-          child: const Text('Izvrši povrat')),
-      ],
-    ));
-    if (ok != true || !mounted) return;
+    final reason = await showRefundReasonDialog(context,
+        message: 'Vratiti ${_money.format(p.amount)} pacijentu ${p.patientName ?? ''} putem PayPal-a? Ova akcija je nepovratna.');
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<PaymentProvider>().refund(p.captureId!, reason: reason.text.trim());
+      await context.read<PaymentProvider>().refund(p.captureId!, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('Povrat od ${_money.format(p.amount)} je uspješno izvršen.')));
       _refresh();
     } catch (e) {

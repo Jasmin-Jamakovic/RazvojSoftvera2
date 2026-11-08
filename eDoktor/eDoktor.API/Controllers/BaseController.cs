@@ -1,9 +1,6 @@
-using eDoktor.Model;
-using eDoktor.Model.Requests;
 using eDoktor.Model.SearchObjects;
 using eDoktor.Services;
 using Microsoft.AspNetCore.Mvc;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using eDoktor.Model.Responses;
 using Microsoft.AspNetCore.Authorization;

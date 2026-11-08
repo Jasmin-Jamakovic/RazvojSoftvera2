@@ -60,16 +60,42 @@ class ApiClient {
       onUnauthorized?.call();
       throw ApiException(401, 'Sesija je istekla. Prijavite se ponovo.');
     }
-    String message = 'HTTP ${r.statusCode}';
+    throw ApiException(r.statusCode, _errorMessage(r));
+  }
+
+  /// Extracts a readable message from an error response. The API's ExceptionFilter and
+  /// model validation return `{ "errors": { "field": ["msg", ...] } }`; other shapes
+  /// (`message`/`title`/`detail` objects or a plain-text body) are handled as a fallback.
+  static String _errorMessage(http.Response r) {
+    final fallback = 'HTTP ${r.statusCode}';
+    final raw = r.body.trim();
+    if (raw.isEmpty) return fallback;
+    dynamic body;
     try {
-      final body = jsonDecode(r.body);
-      if (body is Map && body['errors'] is Map) {
-        final errors = body['errors'] as Map;
+      body = jsonDecode(raw);
+    } catch (_) {
+      // Not JSON: a plain-text message (but not an HTML error page).
+      return raw.startsWith('<') ? fallback : raw;
+    }
+    if (body is String && body.trim().isNotEmpty) return body.trim();
+    if (body is Map) {
+      final errors = body['errors'];
+      if (errors is Map) {
         final lines = <String>[];
-        errors.forEach((k, v) { if (v is List) lines.addAll(v.map((e) => e.toString())); });
-        if (lines.isNotEmpty) message = lines.join('\n');
+        errors.forEach((k, v) {
+          if (v is List) {
+            lines.addAll(v.map((e) => e.toString()));
+          } else if (v != null) {
+            lines.add(v.toString());
+          }
+        });
+        if (lines.isNotEmpty) return lines.join('\n');
       }
-    } catch (_) {}
-    throw ApiException(r.statusCode, message);
+      for (final key in ['message', 'detail', 'title']) {
+        final v = body[key];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+    }
+    return fallback;
   }
 }

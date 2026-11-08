@@ -51,6 +51,9 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     final selectedSpecs = <int>{...?d?.specializations.map((s) => s.id)};
     Uint8List? photo;
     String? photoError;
+    final provider = context.read<DoctorProvider>();
+    var saving = false;
+    String? error;
 
     Future<void> pickPhoto(void Function(void Function()) set) async {
       final files = await FilePicker.pickFiles(type: FileType.image, dialogTitle: 'Fotografija ljekara');
@@ -69,7 +72,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     final ok = await showDialog<bool>(context: context, builder: (c) => StatefulBuilder(builder: (c, set) => AlertDialog(
       title: Row(children: [
         Expanded(child: Text(d == null ? 'Novi ljekar' : 'Uredi ljekara')),
-        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: () => Navigator.pop(c, false)),
+        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: saving ? null : () => Navigator.pop(c, false)),
       ]),
       content: SizedBox(width: 520, child: SingleChildScrollView(child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(children: [
@@ -139,47 +142,54 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         if (selectedSpecs.isEmpty)
           const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.only(top: 6),
             child: Text('Odaberite barem jednu specijalizaciju.', style: TextStyle(color: Colors.red, fontSize: 12)))),
+        if (error != null)
+          Align(alignment: Alignment.centerLeft, child: Padding(padding: const EdgeInsets.only(top: 12),
+            child: Text(error!, style: const TextStyle(color: Colors.red)))),
       ])))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Odustani')),
-        FilledButton(onPressed: () {
-          final formValid = formKey.currentState!.validate();
-          set(() {});
-          if (formValid && selectedSpecs.isNotEmpty) Navigator.pop(c, true);
-        }, child: const Text('Sačuvaj')),
+        TextButton(onPressed: saving ? null : () => Navigator.pop(c, false), child: const Text('Odustani')),
+        FilledButton(
+          onPressed: saving ? null : () async {
+            final formValid = formKey.currentState!.validate();
+            set(() {});
+            if (!formValid || selectedSpecs.isEmpty) return;
+            final body = {
+              'firstName': firstName.text.trim(),
+              'lastName': lastName.text.trim(),
+              'username': username.text.trim().isEmpty ? null : username.text.trim(),
+              'email': d == null ? email.text.trim() : null,
+              'phoneNumber': phone.text.trim().isEmpty ? null : phone.text.trim(),
+              'clinicId': clinicId,
+              'bio': bio.text.trim(),
+              'yearsExperience': int.parse(years.text.trim()),
+              // The form accepts a decimal comma (49,99) as well as a point.
+              'consultationPrice': double.parse(price.text.trim().replaceAll(',', '.')),
+              'profilePhoto': photo == null ? null : base64Encode(photo!),
+              'specializationIds': selectedSpecs.toList(),
+            };
+            set(() { saving = true; error = null; });
+            try {
+              if (d == null) {
+                await provider.create(body);
+              } else {
+                await provider.update(d.id, body);
+              }
+              if (c.mounted) Navigator.pop(c, true);
+            } catch (e) {
+              if (c.mounted) set(() { saving = false; error = '$e'; });
+            }
+          },
+          child: saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Sačuvaj')),
       ],
     )));
 
     if (ok != true || !mounted) return;
-
-    final body = {
-      'firstName': firstName.text.trim(),
-      'lastName': lastName.text.trim(),
-      'username': username.text.trim().isEmpty ? null : username.text.trim(),
-      'email': d == null ? email.text.trim() : null,
-      'phoneNumber': phone.text.trim().isEmpty ? null : phone.text.trim(),
-      'clinicId': clinicId,
-      'bio': bio.text.trim(),
-      'yearsExperience': int.parse(years.text.trim()),
-      // The form accepts a decimal comma (49,99) as well as a point.
-      'consultationPrice': double.parse(price.text.trim().replaceAll(',', '.')),
-      'profilePhoto': photo == null ? null : base64Encode(photo!),
-      'specializationIds': selectedSpecs.toList(),
-    };
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      if (d == null) {
-        await context.read<DoctorProvider>().create(body);
-      } else {
-        await context.read<DoctorProvider>().update(d.id, body);
-      }
-      _refresh();
-      messenger.showSnackBar(SnackBar(content: Text(d == null
-          ? 'Ljekar je uspješno dodan. Privremena lozinka je poslana na ${email.text.trim()}.'
-          : 'Podaci ljekara su uspješno ažurirani.')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
-    }
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(d == null
+        ? 'Ljekar je uspješno dodan. Privremena lozinka je poslana na ${email.text.trim()}.'
+        : 'Podaci ljekara su uspješno ažurirani.')));
   }
 
   Future<void> _confirmDelete(Doctor d) async {
@@ -191,8 +201,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
         FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(c, true), child: const Text('Obriši')),
       ],
     ));
-    if (ok != true) return;
-    try { await context.read<DoctorProvider>().delete(d.id); _refresh(); }
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<DoctorProvider>().delete(d.id);
+      _refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ljekar je uspješno obrisan.')));
+    }
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 

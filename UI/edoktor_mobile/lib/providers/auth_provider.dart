@@ -4,7 +4,6 @@ import '../services/api_client.dart';
 import '../services/auth_store.dart';
 
 class AuthProvider extends ChangeNotifier {
-  bool get isLoggedIn => AuthStore.token != null;
   User? get user => AuthStore.user;
 
   Future<void> login(String username, String password) async {
@@ -53,7 +52,15 @@ class AuthProvider extends ChangeNotifier {
     await ApiClient.post('/api/auth/reset-password', {'email': email.trim(), 'code': code.trim(), 'newPassword': newPassword});
   }
 
+  /// Revokes the token on the server (best effort), then clears the local session.
   Future<void> logout() async {
+    if (AuthStore.token != null) {
+      try {
+        await ApiClient.post('/api/auth/logout', null, false);
+      } catch (e) {
+        debugPrint('Server logout failed: $e');
+      }
+    }
     await AuthStore.clear();
     notifyListeners();
   }

@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/notification_provider.dart';
 import '../providers/providers.dart';
 import 'dashboard_screen.dart';
 import 'doctors_screen.dart';
 import 'specializations_screen.dart';
 import 'clinics_screen.dart';
 import 'cities_screen.dart';
+import 'countries_screen.dart';
+import 'doctor_appointments_screen.dart';
+import 'notifications_screen.dart';
 import 'appointments_screen.dart';
 import 'patients_screen.dart';
 import 'payments_screen.dart';
@@ -21,32 +25,37 @@ class ShellScreen extends StatefulWidget {
 class _ShellScreenState extends State<ShellScreen> {
   int _idx = 0;
 
-  static const _items = [
-    ('Dashboard', Icons.dashboard),
-    ('Ljekari', Icons.medical_services),
-    ('Specijalizacije', Icons.category),
-    ('Klinike', Icons.local_hospital),
-    ('Gradovi', Icons.location_city),
-    ('Termini', Icons.event),
-    ('Pacijenti', Icons.people),
-    ('Plaćanja', Icons.payments),
-    ('Izvještaji', Icons.bar_chart),
+  bool get _isDoctor => context.read<AuthProvider>().user?.role == 'doctor';
+
+  static final _adminItems = <_MenuItem>[
+    _MenuItem('Dashboard', Icons.dashboard, () => const DashboardScreen()),
+    _MenuItem('Ljekari', Icons.medical_services, () => const DoctorsScreen()),
+    _MenuItem('Specijalizacije', Icons.category, () => const SpecializationsScreen()),
+    _MenuItem('Klinike', Icons.local_hospital, () => const ClinicsScreen()),
+    _MenuItem('Države', Icons.public, () => const CountriesScreen()),
+    _MenuItem('Gradovi', Icons.location_city, () => const CitiesScreen()),
+    _MenuItem('Termini', Icons.event, () => const AppointmentsScreen()),
+    _MenuItem('Pacijenti', Icons.people, () => const PatientsScreen()),
+    _MenuItem('Plaćanja', Icons.payments, () => const PaymentsScreen()),
+    _MenuItem('Izvještaji', Icons.bar_chart, () => const ReportsScreen()),
   ];
 
-  Widget _page(int i) => switch (i) {
-        0 => const DashboardScreen(),
-        1 => const DoctorsScreen(),
-        2 => const SpecializationsScreen(),
-        3 => const ClinicsScreen(),
-        4 => const CitiesScreen(),
-        5 => const AppointmentsScreen(),
-        6 => const PatientsScreen(),
-        7 => const PaymentsScreen(),
-        8 => const ReportsScreen(),
-        _ => const SizedBox(),
-      };
+  // The doctor's patient record and consultation chat open from a row in "Moji termini".
+  static final _doctorItems = <_MenuItem>[
+    _MenuItem('Moji termini', Icons.event, () => const DoctorAppointmentsScreen()),
+    _MenuItem('Notifikacije', Icons.notifications, () => const NotificationsScreen(), showsUnread: true),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Doctors get real-time notifications (new appointment, cancellation, payment).
+    if (_isDoctor) context.read<NotificationProvider>().connect();
+  }
 
   Future<void> _logout() async {
+    await context.read<NotificationProvider>().disconnect();
+    if (!mounted) return;
     await context.read<AuthProvider>().logout();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (_) => false);
@@ -55,31 +64,47 @@ class _ShellScreenState extends State<ShellScreen> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
+    final doctor = user?.role == 'doctor';
+    final items = doctor ? _doctorItems : _adminItems;
+    final unread = doctor ? context.watch<NotificationProvider>().unreadCount : 0;
+    final idx = _idx < items.length ? _idx : 0;
     return Scaffold(
       backgroundColor: const Color(0xFFF1F6F2),
       body: Padding(
         padding: const EdgeInsets.all(14),
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           _Sidebar(
-            items: _items,
-            selected: _idx,
+            items: items,
+            selected: idx,
             onSelect: (i) => setState(() => _idx = i),
             userName: user?.fullName ?? '',
+            roleLabel: doctor ? 'Ljekar' : 'Administrator',
+            panelTitle: doctor ? 'Ljekarski panel' : 'Admin Panel',
+            unread: unread,
             onLogout: _logout,
           ),
           const SizedBox(width: 14),
-          Expanded(child: _page(_idx)),
+          Expanded(child: items[idx].builder()),
         ]),
       ),
     );
   }
 }
 
+class _MenuItem {
+  final String label;
+  final IconData icon;
+  final Widget Function() builder;
+  final bool showsUnread;
+  const _MenuItem(this.label, this.icon, this.builder, {this.showsUnread = false});
+}
+
 class _Sidebar extends StatelessWidget {
-  final List<(String, IconData)> items;
+  final List<_MenuItem> items;
   final int selected;
   final ValueChanged<int> onSelect;
-  final String userName;
+  final String userName, roleLabel, panelTitle;
+  final int unread;
   final VoidCallback onLogout;
 
   const _Sidebar({
@@ -87,6 +112,9 @@ class _Sidebar extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.userName,
+    required this.roleLabel,
+    required this.panelTitle,
+    required this.unread,
     required this.onLogout,
   });
 
@@ -111,15 +139,15 @@ class _Sidebar extends StatelessWidget {
         boxShadow: const [BoxShadow(color: Color(0x552E7D32), blurRadius: 28, offset: Offset(0, 12))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(10, 0, 10, 18),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 0, 10, 18),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text.rich(TextSpan(
+            const Text.rich(TextSpan(
               style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.3),
               children: [TextSpan(text: 'e'), TextSpan(text: 'Doktor', style: TextStyle(color: Color(0xFFB9F6CA)))],
             )),
-            SizedBox(height: 2),
-            Text('Admin Panel', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 2),
+            Text(panelTitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
           ]),
         ),
         Expanded(
@@ -128,8 +156,9 @@ class _Sidebar extends StatelessWidget {
             itemCount: items.length,
             separatorBuilder: (_, __) => const SizedBox(height: 2),
             itemBuilder: (_, i) => _NavItem(
-              label: items[i].$1,
-              icon: items[i].$2,
+              label: items[i].label,
+              icon: items[i].icon,
+              badge: items[i].showsUnread ? unread : 0,
               active: i == selected,
               onTap: () => onSelect(i),
             ),
@@ -150,7 +179,7 @@ class _Sidebar extends StatelessWidget {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(userName, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                  const Text('Administrator', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                  Text(roleLabel, style: const TextStyle(color: Colors.white60, fontSize: 11)),
                 ]),
               ),
             ]),
@@ -177,9 +206,10 @@ class _NavItem extends StatefulWidget {
   final String label;
   final IconData icon;
   final bool active;
+  final int badge;
   final VoidCallback onTap;
 
-  const _NavItem({required this.label, required this.icon, required this.active, required this.onTap});
+  const _NavItem({required this.label, required this.icon, required this.active, required this.onTap, this.badge = 0});
 
   @override
   State<_NavItem> createState() => _NavItemState();
@@ -234,6 +264,13 @@ class _NavItemState extends State<_NavItem> {
                 child: Text(widget.label, overflow: TextOverflow.ellipsis),
               ),
             ),
+            if (widget.badge > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: const Color(0xFFFF5252), borderRadius: BorderRadius.circular(10)),
+                child: Text(widget.badge > 99 ? '99+' : '${widget.badge}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
           ]),
         ),
       ),

@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace eDoktor.Services.Database.Entities
@@ -16,5 +17,10 @@ namespace eDoktor.Services.Database.Entities
         public DateTime EndUtc { get; set; }
 
         public bool IsBooked { get; set; } = false;
+
+        // Concurrency token: two patients booking the same free slot at the same moment can't both win;
+        // the second SaveChanges gets a DbUpdateConcurrencyException.
+        [Timestamp]
+        public byte[] RowVersion { get; set; } = default!;
     }
 }

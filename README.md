@@ -4,7 +4,7 @@ Full-stack project for the Razvoj Softvera 2 course @ FIT. **Index number: IB210
 The SQL Server database is named **`210059`** (index number without the `IB` prefix, per the assignment).
 **eDoktor** is an e-Health platform that connects patients with doctors digitally: search doctors by specialization, book appointments, do online video consultations, view your medical record + e-prescriptions, and pay via PayPal.
 
-It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Server / RabbitMQ / Redis, a Flutter desktop app for administrators, and a Flutter mobile app for patients.
+It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Server / RabbitMQ / Redis, a Flutter desktop app for administrators and doctors, and a Flutter mobile app for patients.
 
 ## Table of Contents
 - [Project Overview](#project-overview)
@@ -22,8 +22,8 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 
 ## Project Overview
 - Patients register/login on the **mobile app**, search doctors by specialization or name, book appointments from a calendar of available slots (in-person or online), pay with PayPal, attend video consultations, view their **electronic medical record** (visits, prescriptions, lab results), and receive real-time notifications.
-- Administrators use the **desktop app** to manage doctors, specializations, clinics, cities, patients, appointments and payments, and to view reports.
-- Doctors are managed accounts created by the admin (the temporary password is emailed to them). There is no separate doctor app: doctors use the API (Swagger) to confirm/complete appointments, add medical-record entries, issue prescriptions and chat during online consultations; the admin can do the appointment actions from the desktop app.
+- Administrators use the **desktop app** to manage doctors, specializations, clinics, countries, cities, patients, appointments and payments, and to view reports.
+- Doctors are managed accounts created by the admin (the temporary password is emailed to them). Doctors sign in to the same **desktop app** and get their own menu: **Moji termini** (confirm, complete and cancel their appointments, open the patient's medical record to write visits, issue e-prescriptions and add lab results, and chat with the patient of an online consultation) and **Notifikacije** (new appointment, cancellation, payment; real-time with an unread badge).
 
 ## Tech Stack
 - **Backend**: .NET 8 (`eDoktor.API`), Entity Framework Core, SQL Server 2022
@@ -73,11 +73,18 @@ It uses a microservice-style architecture (REST API + Worker), .NET 8 / SQL Serv
 ### Desktop app (administrator)
 - **Dashboard** with key numbers (doctors, patients, appointments, monthly revenue, top specialization and doctor) and revenue per doctor.
 - **Doctors**: CRUD with photo upload, phone, required email, specializations, clinic, price; per-doctor **working hours** that generate bookable time slots.
-- **Specializations, clinics, cities**: CRUD. A clinic's location is picked on an OpenStreetMap map or found from its address (geocoding through the API).
-- **Patients**: list and search; **patient details** with the full medical record (visits, prescriptions, lab results) and appointment history.
+- **Specializations, clinics, countries, cities**: CRUD (every city belongs to a country, chosen from a dropdown). A clinic's location is picked on an OpenStreetMap map or found from its address (geocoding through the API).
+- **Patients**: list and search; **patient details** with the appointment history and the medical record (visits, prescriptions, lab results as paged, searchable tabs); the admin can also add, edit and delete lab results.
 - **Appointments**: filter by status, confirm, complete, **reschedule** to another free slot (with a reason), cancel (reason required, the patient is notified), refund. Each appointment has an **audit trail** (who created/confirmed/moved/completed/cancelled it, when and why).
 - **Payments**: all PayPal payments with filters, totals per status, manual refund.
 - **Reports**: doctor performance (period + specialization) and appointments (period + status); chart + table; download or print as PDF.
+
+### Desktop app (doctor)
+Doctors log in to the same desktop app; the side menu is built from the role:
+- **Moji termini**: the doctor's own appointments, filtered by status and period (upcoming / past / all), searched by patient name, paged. Row actions with confirmation: **Potvrdi** (pending; paid appointments are confirmed automatically after payment), **Završi** (confirmed, after the start time), **Otkaži** (a reason is required, the patient is notified), **Karton pacijenta** and **Chat** (online consultations).
+- **Karton pacijenta**: record header (blood type, allergies, counts) and the tabs **Posjete / Recepti / Nalazi**, paged and searchable. The doctor adds a visit for one of their confirmed or completed appointments with the patient (diagnosis, therapy, notes), issues an e-prescription on a visit (master-details form with one or more medication rows), adds lab results, and edits or deletes their own entries.
+- **Chat**: the consultation chat with the patient (text and photos), updated in real time over SignalR, with polling as a fallback.
+- **Notifikacije**: new appointment, cancellation and payment notifications in real time (SignalR, 30 s polling fallback), unread badge in the menu, mark one or all as read.
 
 ### Mobile app (patient)
 - Registration, login, **password reset** with a code sent by email, change password, edit profile.
@@ -104,7 +111,7 @@ eDoktor/
   .env-tajne.zip           The real .env (password: fit)
   .env.example             All configuration keys, without secrets
 UI/
-  edoktor_desktop/         Flutter admin app
+  edoktor_desktop/         Flutter desktop app (admin + doctor)
   edoktor_mobile/          Flutter patient app
 ```
 
@@ -122,7 +129,7 @@ unzip -P fit .env-tajne.zip   # creates eDoktor/.env (PayPal sandbox and SMTP al
 docker compose up --build
 ```
 
-This starts SQL Server, RabbitMQ, Redis, the API (port **5190**), and the Worker. On first boot the API creates the database `210059` and seeds it: one admin, two patients, four doctors with photos, specializations, clinics, cities, free time slots for the coming days, appointments in every state, payments, reviews, medical records, prescriptions and lab results.
+This starts SQL Server, RabbitMQ, Redis, the API (port **5190**), and the Worker. On first boot the API creates the database `210059` and seeds it: one admin, 8 patients and 8 doctors (with photos), 8 specializations, 5 clinics, 5 countries and 14 cities, free time slots for the coming days, 40+ appointments in every state, PayPal payments (captured and refunded), reviews, medical records with visits, prescriptions and lab results, search history for the recommender, a consultation chat and notifications. The seeded payments are demo data (never charged through PayPal), so cancelling a seeded paid appointment records the refund locally.
 
 To start again from an empty database: `docker compose down -v && docker compose up --build`.
 
@@ -151,17 +158,15 @@ The ready-made APK is in the GitHub Release (`fit-build-*.zip` → `app-release.
 Online consultations (Jitsi) and clinic maps (OpenStreetMap) need internet access on the device/emulator.
 
 ## Credentials
-All seeded accounts use password **`stringst`**.
+All seeded accounts use password **`test`**.
 
 | Context | Username | Password |
 |---|---|---|
-| Desktop app (admin) | `admin` | `stringst` |
-| Mobile app (patient, Sarajevo) | `patient1` | `stringst` |
-| Mobile app (patient, Banja Luka) | `patient2` | `stringst` |
-| Doctor (API / Swagger) | `doktor.mehic` (Opća praksa) | `stringst` |
-| Doctor (API / Swagger) | `doktor.begic` (Kardiologija) | `stringst` |
-| Doctor (API / Swagger) | `doktor.hodzic` (Dermatologija) | `stringst` |
-| Doctor (API / Swagger) | `doktor.selimovic` (Neurologija) | `stringst` |
+| Desktop app (admin) | `desktop` | `test` |
+| Desktop app (doctor, Opća praksa) | `doctor` | `test` |
+| Mobile app (patient, Sarajevo) | `mobile` | `test` |
+| Other patients (mobile) | `patient2` … `patient8` | `test` |
+| Other doctors (desktop) | `doktor.begic`, `doktor.hodzic`, `doktor.selimovic`, `doktor.kurtovic`, `doktor.alic`, `doktor.ramic`, `doktor.causevic` | `test` |
 | PayPal sandbox buyer (in the payment WebView) | `TODO-sandbox-buyer@personal.example.com` | `TODO` |
 
 ## Configuration (.env)

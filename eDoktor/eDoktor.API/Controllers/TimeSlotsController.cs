@@ -19,6 +19,12 @@ namespace eDoktor.API.Controllers
         [HttpGet]
         public Task<List<TimeSlotResponse>> Get([FromQuery] TimeSlotSearchObject s) => _slots.GetAsync(s ?? new());
 
+        [HttpGet("{id}")]
+        public Task<TimeSlotResponse> GetById(int id) => _slots.GetByIdAsync(id);
+
+        [HttpPut("{id}"), Authorize(Roles = Roles.AdminOrDoctor)]
+        public Task<TimeSlotResponse> Update(int id, TimeSlotUpdateRequest req) => _slots.UpdateAsync(id, req);
+
         [HttpPost("generate"), Authorize(Roles = Roles.AdminOrDoctor)]
         public async Task<IActionResult> Generate(TimeSlotGenerateRequest req)
         {

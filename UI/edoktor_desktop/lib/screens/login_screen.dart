@@ -22,9 +22,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await context.read<AuthProvider>().login(_user.text, _pwd.text);
       if (!mounted) return;
-      if (context.read<AuthProvider>().user?.role != 'admin') {
+      final role = context.read<AuthProvider>().user?.role;
+      if (role != 'admin' && role != 'doctor') {
         await context.read<AuthProvider>().logout();
-        setState(() => _error = 'Samo admin nalozi mogu pristupiti desktop aplikaciji.');
+        setState(() => _error = 'Samo admin i ljekar mogu pristupiti desktop aplikaciji.');
         return;
       }
       Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const ShellScreen()));
@@ -39,9 +40,9 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420), child: Card(
         elevation: 4,
         child: Padding(padding: const EdgeInsets.all(32), child: Form(key: _formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('eDoktor Admin', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2E7D32)), textAlign: TextAlign.center),
+          const Text('eDoktor', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2E7D32)), textAlign: TextAlign.center),
           const SizedBox(height: 4),
-          const Text('Prijava administratora', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+          const Text('Prijava administratora i ljekara', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
           const SizedBox(height: 32),
           TextFormField(controller: _user, autovalidateMode: AutovalidateMode.onUserInteraction,
             decoration: const InputDecoration(labelText: 'Korisničko ime', border: OutlineInputBorder()),

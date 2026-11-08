@@ -37,9 +37,10 @@ class ApiClient {
     return _decode(r);
   }
 
-  static Future<dynamic> post(String path, [Object? body]) async {
+  /// [notifyUnauthorized] = false skips the global 401 handler (used by logout, which clears the session itself).
+  static Future<dynamic> post(String path, [Object? body, bool notifyUnauthorized = true]) async {
     final r = await http.post(_uri(path), headers: _headers(jsonBody: true), body: body == null ? null : jsonEncode(body));
-    return _decode(r);
+    return _decode(r, notifyUnauthorized: notifyUnauthorized);
   }
 
   static Future<dynamic> put(String path, Object? body) async {
@@ -52,27 +53,50 @@ class ApiClient {
     _decode(r);
   }
 
-  static dynamic _decode(http.Response r) {
+  static dynamic _decode(http.Response r, {bool notifyUnauthorized = true}) {
     if (r.statusCode >= 200 && r.statusCode < 300) {
       if (r.body.isEmpty) return null;
       return jsonDecode(r.body);
     }
     if (r.statusCode == 401) {
-      onUnauthorized?.call();
+      if (notifyUnauthorized) onUnauthorized?.call();
       throw ApiException(401, 'Sesija je istekla. Prijavite se ponovo.');
     }
-    String message = 'HTTP ${r.statusCode}';
+    throw ApiException(r.statusCode, _errorMessage(r));
+  }
+
+  /// Extracts a readable message from an error body: the ExceptionFilter / validation shape
+  /// `{errors: {key: [msg]}}`, a `message`/`title`/`detail` field, or a plain-string body.
+  static String _errorMessage(http.Response r) {
+    final fallback = 'HTTP ${r.statusCode}';
+    final raw = r.body.trim();
+    if (raw.isEmpty) return fallback;
+    dynamic body;
     try {
-      final body = jsonDecode(r.body);
-      if (body is Map && body['errors'] is Map) {
-        final errors = body['errors'] as Map;
+      body = jsonDecode(raw);
+    } on FormatException {
+      // Not JSON: a plain-text message (but not an HTML error page).
+      return raw.startsWith('<') ? fallback : raw;
+    }
+    if (body is String && body.trim().isNotEmpty) return body.trim();
+    if (body is Map) {
+      final errors = body['errors'];
+      if (errors is Map) {
         final lines = <String>[];
         errors.forEach((k, v) {
-          if (v is List) lines.addAll(v.map((e) => e.toString()));
+          if (v is List) {
+            lines.addAll(v.map((e) => e.toString()));
+          } else if (v != null) {
+            lines.add(v.toString());
+          }
         });
-        if (lines.isNotEmpty) message = lines.join('\n');
+        if (lines.isNotEmpty) return lines.join('\n');
       }
-    } catch (_) {}
-    throw ApiException(r.statusCode, message);
+      for (final key in ['message', 'title', 'detail']) {
+        final v = body[key];
+        if (v is String && v.trim().isNotEmpty) return v.trim();
+      }
+    }
+    return fallback;
   }
 }

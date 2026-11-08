@@ -9,6 +9,7 @@ namespace eDoktor.Model.Responses
         public int MedicalRecordEntryId { get; set; }
         public int AppointmentId { get; set; }
         public string? DoctorName { get; set; }
+        public string? Diagnosis { get; set; }
         public DateTime IssuedAt { get; set; }
         public List<PrescriptionItemResponse> Items { get; set; } = new();
     }

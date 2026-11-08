@@ -112,9 +112,14 @@ class _DoctorReportTabState extends State<_DoctorReportTab> with AutomaticKeepAl
   void _generate() {
     final description = 'Period: ${widget.periodText()} · ${_specName == null ? 'Sve specijalizacije' : 'Specijalizacija: $_specName'}';
     setState(() {
+      // Disable PDF/print until the new report arrives, so they never export stale data.
+      _last = null;
       _report = context.read<DashboardProvider>()
           .doctorReport(from: widget.range().start, to: widget.toExclusive(), specializationId: _specId)
-          .then((r) { _last = r; _lastDescription = description; return r; });
+          .then((r) {
+            if (mounted) setState(() { _last = r; _lastDescription = description; });
+            return r;
+          });
     });
   }
 

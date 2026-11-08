@@ -164,7 +164,7 @@ namespace eDoktor.Services.Doctors
                 createdDoctorId = doctor.Id;
             }
 
-            await _rabbit.PublishAsync(QueueNames.DoctorCreated, new DoctorCreatedMessage
+            var sent = await _rabbit.PublishAsync(QueueNames.DoctorCreated, new DoctorCreatedMessage
             {
                 UserId = user.Id,
                 Email = user.Email,
@@ -173,6 +173,9 @@ namespace eDoktor.Services.Doctors
                 Username = user.Username,
                 TemporaryPassword = tempPassword
             });
+            // The doctor only learns their password from this e-mail, so the admin must know when it wasn't sent.
+            if (!sent)
+                throw new UserException("Ljekar je kreiran, ali e-mail sa lozinkom nije poslan. Pokušajte reset lozinke.");
 
             return (await GetByIdAsync(createdDoctorId))!;
         }

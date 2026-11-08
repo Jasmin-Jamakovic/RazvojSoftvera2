@@ -22,10 +22,17 @@ class GeocodingResult {
       GeocodingResult(j['displayName'] ?? '', LatLng((j['latitude'] as num).toDouble(), (j['longitude'] as num).toDouble()));
 }
 
+class Country {
+  final int id; final String name;
+  Country({required this.id, required this.name});
+  factory Country.fromJson(Map<String, dynamic> j) => Country(id: j['id'], name: j['name'] ?? '');
+}
+
 class City {
-  final int id; final String name; final String? country;
-  City({required this.id, required this.name, this.country});
-  factory City.fromJson(Map<String, dynamic> j) => City(id: j['id'], name: j['name'] ?? '', country: j['country']);
+  final int id; final String name; final int countryId; final String? countryName;
+  City({required this.id, required this.name, required this.countryId, this.countryName});
+  factory City.fromJson(Map<String, dynamic> j) =>
+      City(id: j['id'], name: j['name'] ?? '', countryId: j['countryId'] ?? 0, countryName: j['countryName']);
 }
 
 class Doctor {
@@ -55,11 +62,13 @@ class Appointment {
   final double price;
   final Map<String, dynamic>? payment;
   final String? cancellationReason;
+  final bool isPaid;
+  final String? videoRoomId;
   // Audit trail
   final DateTime createdAt;
   final DateTime? confirmedAt, completedAt, cancelledAt, rescheduledAt;
   final String? confirmedByName, completedByName, cancelledByName, rescheduledByName, rescheduleReason;
-  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason,
+  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason, this.isPaid = false, this.videoRoomId,
       required this.createdAt, this.confirmedAt, this.completedAt, this.cancelledAt, this.rescheduledAt,
       this.confirmedByName, this.completedByName, this.cancelledByName, this.rescheduledByName, this.rescheduleReason});
   bool get isOnline => type == 1;
@@ -71,6 +80,8 @@ class Appointment {
         price: (j['price'] ?? 0).toDouble(),
         payment: j['payment'] as Map<String, dynamic>?,
         cancellationReason: j['cancellationReason'],
+        isPaid: j['isPaid'] ?? false,
+        videoRoomId: j['videoRoomId'],
         createdAt: DateTime.parse(j['createdAt']).toLocal(),
         confirmedAt: _localOrNull(j['confirmedAt']),
         completedAt: _localOrNull(j['completedAt']),

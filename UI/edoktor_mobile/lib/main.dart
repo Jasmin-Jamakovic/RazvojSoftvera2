@@ -23,6 +23,8 @@ void main() async {
 
   // On a 401 from the API, clear the session and return to the login screen.
   ApiClient.onUnauthorized = () {
+    final ctx = navigatorKey.currentContext;
+    if (ctx != null) ctx.read<NotificationProvider>().disconnect();
     AuthStore.clear();
     navigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),

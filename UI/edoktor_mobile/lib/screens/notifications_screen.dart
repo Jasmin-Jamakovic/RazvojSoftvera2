@@ -32,7 +32,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             : ListView.builder(itemCount: p.items.length, itemBuilder: (c, i) {
                 final n = p.items[i];
                 return ListTile(
-                  leading: Icon(n.isRead ? Icons.notifications_none : Icons.notifications_active, color: n.isRead ? Colors.grey : AppColors.primary),
+                  leading: Icon(_icon(n.type, n.isRead), color: n.isRead ? Colors.grey : AppColors.primary),
                   title: Text(n.title, style: TextStyle(fontWeight: n.isRead ? FontWeight.normal : FontWeight.bold)),
                   subtitle: Text('${n.body}\n${fmt.format(n.createdAt)}'),
                   isThreeLine: true,
@@ -42,4 +42,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       ),
     );
   }
+
+  /// Icon per notification type; unknown types fall back to the bell.
+  static IconData _icon(String type, bool isRead) => switch (type) {
+        'appointment' => Icons.event_outlined,
+        'payment' => Icons.payments_outlined,
+        'prescription' => Icons.medication_outlined,
+        'lab_result' => Icons.science_outlined,
+        _ => isRead ? Icons.notifications_none : Icons.notifications_active,
+      };
 }

@@ -1,7 +1,6 @@
-using System.Collections.Generic;
-
 namespace eDoktor.Model.Responses
 {
+    /// The record "header". Visits, prescriptions and lab results are fetched page by page from their own endpoints.
     public class MedicalRecordResponse
     {
         public int Id { get; set; }
@@ -10,8 +9,8 @@ namespace eDoktor.Model.Responses
         public string? BloodType { get; set; }
         public string? Allergies { get; set; }
         public System.DateTime? DateOfBirth { get; set; }
-        public List<MedicalRecordEntryResponse> Entries { get; set; } = new();
-        public List<LabResultResponse> LabResults { get; set; } = new();
-        public List<PrescriptionResponse> Prescriptions { get; set; } = new();
+        public int EntryCount { get; set; }
+        public int PrescriptionCount { get; set; }
+        public int LabResultCount { get; set; }
     }
 }

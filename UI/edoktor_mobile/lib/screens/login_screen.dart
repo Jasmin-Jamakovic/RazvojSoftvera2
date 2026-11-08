@@ -25,12 +25,19 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _busy = true; _error = null; });
     try {
-      await context.read<AuthProvider>().login(_user.text, _pwd.text);
+      final auth = context.read<AuthProvider>();
+      await auth.login(_user.text, _pwd.text);
+      // Doctors and admins use the desktop app; don't keep their session here.
+      if (auth.user?.role != 'patient') {
+        await auth.logout();
+        if (mounted) setState(() => _error = 'Mobilna aplikacija je namijenjena pacijentima.');
+        return;
+      }
       if (mounted) {
         Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const ShellScreen()));
       }
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }

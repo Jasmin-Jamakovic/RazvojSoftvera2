@@ -38,11 +38,25 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
       danger: true,
     );
     if (!ok || !mounted) return;
-    try { await context.read<AppointmentProvider>().cancel(a.id); _refresh(); }
+    try {
+      await context.read<AppointmentProvider>().cancel(a.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Termin je uspješno otkazan.')));
+      _refresh();
+    }
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 
   Future<void> _pay(Appointment a) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'Plaćanje termina',
+      message: 'Platiti ${a.price.toStringAsFixed(2).replaceAll('.', ',')} € za termin kod '
+          '${(a.doctorName?.trim().isNotEmpty ?? false) ? 'dr. ${a.doctorName!.trim()}' : 'ljekara'}?',
+      confirmLabel: 'Da',
+      cancelLabel: 'Ne',
+    );
+    if (!ok || !mounted) return;
     final paid = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => PaypalCheckoutScreen(appointmentId: a.id, price: a.price)),
@@ -140,6 +154,8 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
   }
 }
 
+const _cancelLockedMessage = 'Otkazivanje nije moguće manje od 24h prije termina.';
+
 class _AppointmentCard extends StatelessWidget {
   final Appointment appointment;
   final bool featured;
@@ -162,7 +178,9 @@ class _AppointmentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = appointment;
+    // Pending can always be cancelled; a confirmed appointment only 24h or more before it starts.
     final canCancel = a.status == 'Pending' || (a.status == 'Confirmed' && a.startUtc.difference(DateTime.now()).inHours >= 24);
+    final cancelLocked = !canCancel && a.status == 'Confirmed' && a.endUtc.isAfter(DateTime.now());
     final canJoin = a.status == 'Confirmed' && a.isOnline && a.startUtc.difference(DateTime.now()).inMinutes <= 30 && a.endUtc.isAfter(DateTime.now());
     final canPay = a.status == 'Pending' && !a.isPaid;
     final fg = featured ? Colors.white : AppColors.ink;
@@ -194,6 +212,12 @@ class _AppointmentCard extends StatelessWidget {
         _ActionButton(label: 'Ocijeni ljekara', icon: Icons.star_outline_rounded, style: _ActionStyle.primary, onTap: () => onReview(a)),
       if (canCancel)
         _ActionButton(label: 'Otkaži', style: featured ? _ActionStyle.glass : _ActionStyle.soft, onTap: () => onCancel(a)),
+      if (cancelLocked)
+        Tooltip(
+          message: _cancelLockedMessage,
+          triggerMode: TooltipTriggerMode.tap,
+          child: _ActionButton(label: 'Otkaži', style: featured ? _ActionStyle.glass : _ActionStyle.soft, onTap: null),
+        ),
     ];
 
     return AppCard(
@@ -270,6 +294,11 @@ class _AppointmentCard extends StatelessWidget {
               Expanded(child: actions[i]),
             ],
           ]),
+          if (cancelLocked)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_cancelLockedMessage, style: TextStyle(fontSize: 11.5, color: sub)),
+            ),
         ],
       ]),
     );
@@ -282,7 +311,8 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final IconData? icon;
   final _ActionStyle style;
-  final VoidCallback onTap;
+  /// Null renders the button disabled (dimmed, not tappable).
+  final VoidCallback? onTap;
 
   const _ActionButton({required this.label, this.icon, required this.style, required this.onTap});
 
@@ -295,7 +325,7 @@ class _ActionButton extends StatelessWidget {
       _ActionStyle.glass => (Colors.white.withValues(alpha: 0.16), Colors.white),
     };
     final br = BorderRadius.circular(10);
-    return Material(
+    final button = Material(
       color: bg,
       borderRadius: br,
       child: InkWell(
@@ -310,6 +340,7 @@ class _ActionButton extends StatelessWidget {
         ),
       ),
     );
+    return onTap == null ? Opacity(opacity: 0.45, child: button) : button;
   }
 }
 

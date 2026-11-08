@@ -73,6 +73,33 @@ namespace eDoktor.Services.Reviews
             };
         }
 
+        public async Task<ReviewResponse> GetByIdAsync(int id)
+        {
+            var r = await _db.Reviews.Include(x => x.Patient).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
+                ?? throw new NotFoundException("Recenzija nije pronađena.");
+            return ToResponse(r);
+        }
+
+        // A patient can change the rating/comment of their own review (the appointment stays the same).
+        public async Task<ReviewResponse> UpdateAsync(int id, ReviewUpsertRequest req, int patientId)
+        {
+            var r = await _db.Reviews.Include(x => x.Patient).FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted)
+                ?? throw new NotFoundException("Recenzija nije pronađena.");
+            if (r.PatientId != patientId) throw new ForbiddenException("Možete mijenjati samo vlastitu recenziju.");
+            r.Rating = req.Rating;
+            r.Comment = string.IsNullOrWhiteSpace(req.Comment) ? null : req.Comment.Trim();
+            await _db.SaveChangesAsync();
+            await _recommender.InvalidateAsync(patientId);
+            return ToResponse(r);
+        }
+
+        private static ReviewResponse ToResponse(Review r) => new()
+        {
+            Id = r.Id, AppointmentId = r.AppointmentId, DoctorId = r.DoctorId, PatientId = r.PatientId,
+            PatientName = $"{r.Patient?.FirstName} {r.Patient?.LastName}",
+            Rating = r.Rating, Comment = r.Comment, CreatedAt = r.CreatedAt
+        };
+
         public async Task<bool> DeleteAsync(int id)
         {
             var r = await _db.Reviews.FirstOrDefaultAsync(x => x.Id == id);

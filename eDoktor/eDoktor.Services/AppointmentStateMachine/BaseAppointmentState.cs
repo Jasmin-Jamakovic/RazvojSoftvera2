@@ -94,6 +94,7 @@ namespace eDoktor.Services.AppointmentStateMachine
                 throw new UserException("Odabrani termin je već zauzet.");
             if (newSlot.StartUtc <= DateTime.UtcNow)
                 throw new UserException("Termin nije moguće pomjeriti u prošlost.");
+            await EnsureNoOverlapAsync(a.PatientId, newSlot, a.Id);
 
             var oldStart = a.TimeSlot.StartUtc;
 
@@ -111,8 +112,10 @@ namespace eDoktor.Services.AppointmentStateMachine
                 a.RescheduledAt = DateTime.UtcNow;
                 a.RescheduledById = actingUserId;
                 a.RescheduleReason = reason;
-                await _context.SaveChangesAsync();
+                await SaveSlotChangesAsync();
                 await NotifyAsync(a.PatientId, "Termin pomjeren", text);
+                await NotifyAsync(a.Doctor.UserId, "Termin pomjeren",
+                    $"Termin pacijenta {a.Patient.FirstName} {a.Patient.LastName} je pomjeren sa {DisplayTime.Format(oldStart)} na {DisplayTime.Format(newSlot.StartUtc)}. Razlog: {reason}");
             });
 
             var rabbit = _serviceProvider.GetRequiredService<IRabbitMQService>();
@@ -127,6 +130,51 @@ namespace eDoktor.Services.AppointmentStateMachine
             });
 
             return a;
+        }
+
+        /// A patient can't be in two places at once: rejects a slot that overlaps another active
+        /// (Pending/Confirmed) appointment of the same patient, with any doctor.
+        protected async Task EnsureNoOverlapAsync(int patientId, TimeSlot slot, int? exceptAppointmentId = null)
+        {
+            var overlaps = await _context.Appointments.AnyAsync(a =>
+                a.PatientId == patientId
+                && a.Id != exceptAppointmentId
+                && (a.StateMachine == nameof(PendingAppointmentState) || a.StateMachine == nameof(ConfirmedAppointmentState))
+                && a.TimeSlot.StartUtc < slot.EndUtc && slot.StartUtc < a.TimeSlot.EndUtc);
+            if (overlaps)
+                throw new UserException("Već imate termin u tom vremenu.");
+        }
+
+        /// Saves a change that books a slot. The slot's RowVersion makes a concurrent booking of the same
+        /// slot fail here instead of both patients getting it.
+        protected async Task SaveSlotChangesAsync()
+        {
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new UserException("Termin je upravo zauzet, odaberite drugi.");
+            }
+        }
+
+        /// True when an admin or doctor (not the patient) is performing the current action.
+        protected async Task<bool> IsStaffAsync()
+        {
+            var role = await _serviceProvider.GetRequiredService<ICurrentUserService>().GetUserRoleAsync();
+            return role == Roles.Admin || role == Roles.Doctor;
+        }
+
+        /// Tells the doctor their appointment was cancelled (unless the doctor did it themselves).
+        protected async Task NotifyDoctorOfCancellationAsync(Appointment a, string? reason, bool byStaff)
+        {
+            var actingUserId = await ActingUserIdAsync();
+            if (actingUserId == a.Doctor.UserId) return;
+            var who = byStaff ? "Administrator je otkazao termin" : "Pacijent je otkazao termin";
+            await NotifyAsync(a.Doctor.UserId, who,
+                $"Termin pacijenta {a.Patient.FirstName} {a.Patient.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
+                + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}"));
         }
 
         /// Runs several saves (state change, payment, in-app notification) as one transaction. Joins the

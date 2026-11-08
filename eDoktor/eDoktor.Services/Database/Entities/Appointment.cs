@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -70,9 +71,9 @@ namespace eDoktor.Services.Database.Entities
         public DateTime? Reminder24hSentAt { get; set; }
         public DateTime? Reminder1hSentAt { get; set; }
 
-        public int? PayPalPaymentId { get; set; }
-        [ForeignKey(nameof(PayPalPaymentId))]
-        public virtual PayPalPayment? Payment { get; set; }
+        // Every PayPal order made for this appointment (a retried or cancelled order leaves its own row);
+        // the FK lives on PayPalPayment.AppointmentId.
+        public virtual ICollection<PayPalPayment> Payments { get; set; } = new HashSet<PayPalPayment>();
 
         public virtual MedicalRecordEntry? MedicalRecordEntry { get; set; }
         public virtual VideoCallSession? VideoCallSession { get; set; }

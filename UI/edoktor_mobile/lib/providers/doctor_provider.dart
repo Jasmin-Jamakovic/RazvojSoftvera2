@@ -29,9 +29,4 @@ class DoctorProvider extends ChangeNotifier {
     final items = (res['items'] as List? ?? []).map((e) => Review.fromJson(e)).toList();
     return (items, (res['totalCount'] as int?) ?? items.length);
   }
-
-  Future<Doctor> byId(int id) async {
-    final res = await ApiClient.get('/api/doctors/$id');
-    return Doctor.fromJson(res);
-  }
 }

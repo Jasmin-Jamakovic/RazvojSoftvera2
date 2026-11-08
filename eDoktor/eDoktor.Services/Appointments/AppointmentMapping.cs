@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using eDoktor.Model;
 using eDoktor.Model.Responses;
 using eDoktor.Services.Database.Entities;
 using MapsterMapper;
@@ -15,7 +16,7 @@ namespace eDoktor.Services.Appointments
             .Include(a => a.Patient)
             .Include(a => a.Doctor).ThenInclude(d => d.User)
             .Include(a => a.TimeSlot)
-            .Include(a => a.Payment)
+            .Include(a => a.Payments)
             .Include(a => a.VideoCallSession)
             .Include(a => a.Review)
             .Include(a => a.ConfirmedBy)
@@ -47,10 +48,21 @@ namespace eDoktor.Services.Appointments
             RescheduledAt = a.RescheduledAt,
             RescheduledByName = FullName(a.RescheduledBy),
             RescheduleReason = a.RescheduleReason,
-            Payment = a.Payment == null ? null : mapper.Map<PaymentResponse>(a.Payment),
+            Payment = a.CurrentPayment() is { } p ? mapper.Map<PaymentResponse>(p) : null,
             VideoRoomId = a.VideoCallSession?.RoomId,
             ReviewRating = a.Review is { IsDeleted: false } ? a.Review.Rating : null
         };
+
+        /// The payment that describes the appointment: a settled (captured/refunded) one if there is one,
+        /// otherwise the most recent order. Old cancelled/retried orders stay in the history only.
+        public static PayPalPayment? CurrentPayment(this Appointment a) => a.Payments
+            .OrderByDescending(p => p.Status == PaymentStatus.Captured || p.Status == PaymentStatus.Refunded)
+            .ThenByDescending(p => p.CreatedAt)
+            .FirstOrDefault();
+
+        /// The captured (paid and not refunded) payment, if any.
+        public static PayPalPayment? CapturedPayment(this Appointment a)
+            => a.Payments.FirstOrDefault(p => p.Status == PaymentStatus.Captured);
 
         private static string? FullName(User? u) => u == null ? null : $"{u.FirstName} {u.LastName}";
     }

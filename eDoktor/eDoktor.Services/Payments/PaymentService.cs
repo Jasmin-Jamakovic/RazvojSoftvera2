@@ -162,21 +162,16 @@ namespace eDoktor.Services.Payments
             // Amount comes from the server-side catalog (appointment price), never from the client.
             var order = await _paypal.CreateOrderAsync(appt.Price, _paypalOptions.Currency, $"appointment-{appt.Id}");
 
-            // Two writes (insert payment, link to appointment) committed atomically.
-            await using var tx = await _db.Database.BeginTransactionAsync();
-            var payment = new PayPalPayment
+            // One save: the new order plus the retired ones above.
+            _db.PayPalPayments.Add(new PayPalPayment
             {
                 AppointmentId = appt.Id,
                 OrderId = order.OrderId,
                 Amount = appt.Price,
                 Currency = _paypalOptions.Currency,
                 Status = PaymentStatus.Created
-            };
-            _db.PayPalPayments.Add(payment);
+            });
             await _db.SaveChangesAsync();
-            appt.PayPalPaymentId = payment.Id;
-            await _db.SaveChangesAsync();
-            await tx.CommitAsync();
 
             return new PayPalOrderResponse
             {
@@ -193,7 +188,7 @@ namespace eDoktor.Services.Payments
             var payment = await _db.PayPalPayments.FirstOrDefaultAsync(p => p.OrderId == orderId)
                 ?? throw new NotFoundException("Plaćanje nije pronađeno.");
 
-            var appt = await _db.Appointments.Include(a => a.Patient)
+            var appt = await _db.Appointments.Include(a => a.Patient).Include(a => a.Doctor).ThenInclude(d => d.User)
                 .FirstOrDefaultAsync(a => a.Id == payment.AppointmentId);
             await EnsureOwnerOrAdminAsync(appt?.PatientId ?? 0, "You can only capture your own payment.");
 
@@ -202,6 +197,14 @@ namespace eDoktor.Services.Payments
                 return _mapper.Map<PaymentResponse>(payment);
             if (payment.Status != PaymentStatus.Created)
                 throw new UserException("Ova narudžba više nije važeća. Pokrenite plaćanje ponovo.");
+            // Never take money for an appointment that was cancelled (or otherwise moved on) while the
+            // patient was on the PayPal page: the order is retired and PayPal is not called.
+            if (appt == null || appt.StateMachine != nameof(PendingAppointmentState))
+            {
+                payment.Status = PaymentStatus.Cancelled;
+                await _db.SaveChangesAsync();
+                throw new UserException("Termin više nije moguće platiti jer je otkazan.");
+            }
 
             var capture = await _paypal.CaptureOrderAsync(orderId);
             // Only a completed capture of exactly the charged amount confirms the appointment.
@@ -225,6 +228,9 @@ namespace eDoktor.Services.Payments
 
                 await _notifications.SendAsync(appt.PatientId, "Plaćanje uspješno",
                     $"Vaša uplata od {payment.Amount:0.00} {payment.Currency} za termin je uspješno obrađena. Termin je potvrđen.",
+                    "payment");
+                await _notifications.SendAsync(appt.Doctor.UserId, "Termin je plaćen",
+                    $"Pacijent {appt.Patient.FirstName} {appt.Patient.LastName} je platio termin ({payment.Amount:0.00} {payment.Currency}). Termin je potvrđen.",
                     "payment");
             }
             await tx.CommitAsync();

@@ -29,7 +29,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   int? _cityId;
 
   Uint8List? _newImageBytes; // freshly picked image (not yet saved)
-  String? _existingImageB64; // current image from server
+  ImageProvider? _newImage;
+  ImageProvider? _existingImage; // current image from server, decoded once in initState
   bool _busy = false;
   String? _error;
 
@@ -45,7 +46,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _allergies = TextEditingController(text: u.allergies ?? '');
     _gender = (u.gender == 'M' || u.gender == 'F') ? u.gender : null;
     _cityId = u.cityId;
-    _existingImageB64 = u.image;
+    _existingImage = _decodeImage(u.image);
     context.read<CityProvider>().list().then((c) { if (mounted) setState(() => _cities = c); });
   }
 
@@ -61,17 +62,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800, imageQuality: 80);
     if (picked == null) return;
     final bytes = await picked.readAsBytes();
-    setState(() => _newImageBytes = bytes);
+    setState(() {
+      _newImageBytes = bytes;
+      _newImage = MemoryImage(bytes);
+    });
   }
 
-  ImageProvider? _avatarImage() {
-    if (_newImageBytes != null) return MemoryImage(_newImageBytes!);
-    if (_existingImageB64 != null && _existingImageB64!.isNotEmpty) {
-      try {
-        return MemoryImage(base64Decode(_existingImageB64!));
-      } catch (_) {}
+  static ImageProvider? _decodeImage(String? b64) {
+    if (b64 == null || b64.isEmpty) return null;
+    try {
+      return MemoryImage(base64Decode(b64));
+    } catch (e) {
+      debugPrint('Invalid profile image: $e');
+      return null;
     }
-    return null;
   }
 
   Future<void> _save() async {
@@ -85,8 +89,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'phoneNumber': _phone.text.trim(),
         'cityId': _cityId,
         'gender': _gender,
-        'bloodType': _bloodType,
-        'allergies': _allergies.text.trim().isEmpty ? null : _allergies.text.trim(),
+        // "" (not null) means "clear this field"; null would be ignored by the server.
+        'bloodType': _bloodType ?? '',
+        'allergies': _allergies.text.trim(),
       };
       // Only send the image when the user picked a new one.
       if (_newImageBytes != null) body['image'] = base64Encode(_newImageBytes!);
@@ -105,7 +110,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   @override
   Widget build(BuildContext context) {
     final initials = _firstName.text.isNotEmpty ? _firstName.text[0].toUpperCase() : 'U';
-    final avatar = _avatarImage();
+    final avatar = _newImage ?? _existingImage;
     return Scaffold(
       appBar: AppBar(title: const Text('Uredi profil')),
       body: SingleChildScrollView(
@@ -169,7 +174,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ],
               onChanged: (v) => setState(() => _bloodType = v)),
             const SizedBox(height: 12),
-            TextFormField(controller: _allergies, maxLines: 2, decoration: const InputDecoration(labelText: 'Alergije (opciono)', border: OutlineInputBorder()), validator: (v) => Validators.maxLen(v, 300, 'Alergije')),
+            TextFormField(controller: _allergies, maxLines: 2, decoration: const InputDecoration(labelText: 'Alergije (opciono)', border: OutlineInputBorder()), validator: (v) => Validators.maxLen(v, 500, 'Alergije')),
             if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: const TextStyle(color: Colors.red))],
             const SizedBox(height: 20),
             FilledButton(onPressed: _busy ? null : _save, child: Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Text(_busy ? 'Spremanje...' : 'Sačuvaj'))),

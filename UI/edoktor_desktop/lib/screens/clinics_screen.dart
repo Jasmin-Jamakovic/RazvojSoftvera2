@@ -39,11 +39,14 @@ class _ClinicsScreenState extends State<ClinicsScreen> {
     int? selectedCityId = c?.cityId;
     LatLng? location = c?.latitude != null && c?.longitude != null ? LatLng(c!.latitude!, c.longitude!) : null;
     var showLocationError = false;
+    final provider = context.read<ClinicProvider>();
+    var saving = false;
+    String? error;
 
     final ok = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setLocal) => AlertDialog(
       title: Row(children: [
         Expanded(child: Text(c == null ? 'Nova klinika' : 'Uredi kliniku')),
-        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: () => Navigator.pop(ctx, false)),
+        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: saving ? null : () => Navigator.pop(ctx, false)),
       ]),
       content: SizedBox(width: 420, child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         TextFormField(controller: name, autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -83,26 +86,34 @@ class _ClinicsScreenState extends State<ClinicsScreen> {
         if (showLocationError)
           const Padding(padding: EdgeInsets.only(top: 6),
             child: Text('Odaberite lokaciju klinike na karti ili pretragom adrese.', style: TextStyle(color: Colors.red, fontSize: 12))),
+        if (error != null)
+          Padding(padding: const EdgeInsets.only(top: 12),
+            child: Text(error!, style: const TextStyle(color: Colors.red))),
       ]))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Odustani')),
-        FilledButton(onPressed: () {
-          final valid = formKey.currentState!.validate();
-          setLocal(() => showLocationError = location == null);
-          if (valid && location != null) Navigator.pop(ctx, true);
-        }, child: const Text('Sačuvaj')),
+        TextButton(onPressed: saving ? null : () => Navigator.pop(ctx, false), child: const Text('Odustani')),
+        FilledButton(
+          onPressed: saving ? null : () async {
+            final valid = formKey.currentState!.validate();
+            setLocal(() => showLocationError = location == null);
+            if (!valid || location == null) return;
+            setLocal(() { saving = true; error = null; });
+            try {
+              await provider.upsert(id: c?.id, name: name.text.trim(), address: addr.text.trim(), cityId: selectedCityId!,
+                  latitude: location!.latitude, longitude: location!.longitude);
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            } catch (e) {
+              if (ctx.mounted) setLocal(() { saving = false; error = '$e'; });
+            }
+          },
+          child: saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Sačuvaj')),
       ],
     )));
     if (ok != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await context.read<ClinicProvider>().upsert(id: c?.id, name: name.text.trim(), address: addr.text.trim(), cityId: selectedCityId!,
-          latitude: location!.latitude, longitude: location!.longitude);
-      _refresh();
-      messenger.showSnackBar(SnackBar(content: Text(c == null ? 'Klinika je uspješno dodana.' : 'Klinika je uspješno ažurirana.')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
-    }
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(c == null ? 'Klinika je uspješno dodana.' : 'Klinika je uspješno ažurirana.')));
   }
 
   Future<void> _confirmDelete(Clinic x) async {
@@ -114,8 +125,12 @@ class _ClinicsScreenState extends State<ClinicsScreen> {
         FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(c, true), child: const Text('Obriši')),
       ],
     ));
-    if (ok != true) return;
-    try { await context.read<ClinicProvider>().delete(x.id); _refresh(); }
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<ClinicProvider>().delete(x.id);
+      _refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Klinika je uspješno obrisana.')));
+    }
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 

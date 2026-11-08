@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/entities.dart';
-import '../models/medical_record.dart';
 import '../models/user.dart';
 import '../providers/providers.dart';
 import '../utils/labels.dart';
 import '../widgets/entity_avatar.dart';
+import '../widgets/medical_record_tabs.dart';
 
 /// Admin view of one patient: profile data, appointment history and the electronic medical record.
 class PatientDetailsScreen extends StatefulWidget {
@@ -21,12 +21,12 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
   static final _date = DateFormat('dd.MM.yyyy');
   static final _dateTime = DateFormat('dd.MM.yyyy HH:mm');
 
-  late final Future<MedicalRecord?> _record;
+  late final RecordContext _record = RecordContext(widget.patient.id);
 
   @override
-  void initState() {
-    super.initState();
-    _record = context.read<PatientProvider>().medicalRecord(widget.patient.id);
+  void dispose() {
+    _record.dispose();
+    super.dispose();
   }
 
   String get _initials {
@@ -71,32 +71,21 @@ class _PatientDetailsScreenState extends State<PatientDetailsScreen> {
         const SizedBox(height: 12),
         const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
           Tab(icon: Icon(Icons.event_note), text: 'Historija termina'),
-          Tab(icon: Icon(Icons.medical_information), text: 'Pregledi'),
+          Tab(icon: Icon(Icons.medical_information), text: 'Posjete'),
           Tab(icon: Icon(Icons.medication), text: 'Recepti'),
           Tab(icon: Icon(Icons.science), text: 'Nalazi'),
         ]),
         const SizedBox(height: 12),
         Expanded(child: TabBarView(children: [
           _VisitsTab(patientId: p.id),
-          _recordTab((r) => _EntriesTab(entries: r.entries)),
-          _recordTab((r) => _PrescriptionsTab(prescriptions: r.prescriptions)),
-          _recordTab((r) => _LabResultsTab(results: r.labResults)),
+          RecordEntriesTab(record: _record),
+          RecordPrescriptionsTab(record: _record),
+          RecordLabResultsTab(record: _record),
         ])),
       ]))),
     );
   }
 
-  Widget _recordTab(Widget Function(MedicalRecord r) builder) => Card(child: FutureBuilder<MedicalRecord?>(
-        future: _record,
-        builder: (c, s) {
-          if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-          if (s.hasError) return Center(child: Text('Greška pri učitavanju kartona: ${s.error}', style: const TextStyle(color: Colors.red)));
-          if (s.data == null) return const Center(child: Text('Pacijent još nema zdravstveni karton.'));
-          return builder(s.data!);
-        },
-      ));
-
-  static String fmtDate(DateTime d) => _date.format(d);
   static String fmtDateTime(DateTime d) => _dateTime.format(d);
 }
 
@@ -180,139 +169,5 @@ class _VisitsTabState extends State<_VisitsTab> with AutomaticKeepAliveClientMix
         ])),
       ]);
     }));
-  }
-}
-
-/// Master-details: list of examinations on the left, the selected one's findings on the right.
-class _EntriesTab extends StatefulWidget {
-  final List<RecordEntry> entries;
-  const _EntriesTab({required this.entries});
-  @override
-  State<_EntriesTab> createState() => _EntriesTabState();
-}
-
-class _EntriesTabState extends State<_EntriesTab> {
-  int _selected = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final entries = widget.entries;
-    if (entries.isEmpty) return const Center(child: Text('U kartonu nema evidentiranih pregleda.'));
-    final e = entries[_selected];
-    return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      SizedBox(width: 320, child: ListView.separated(
-        itemCount: entries.length,
-        separatorBuilder: (_, __) => const Divider(height: 1),
-        itemBuilder: (c, i) {
-          final x = entries[i];
-          return ListTile(
-            selected: i == _selected,
-            selectedTileColor: const Color(0xFFE3EDFB),
-            leading: const Icon(Icons.assignment),
-            title: Text(_PatientDetailsScreenState.fmtDate(x.appointmentDate)),
-            subtitle: Text('dr. ${x.doctorName ?? ''}\n${x.diagnosis ?? 'Bez dijagnoze'}', maxLines: 2, overflow: TextOverflow.ellipsis),
-            isThreeLine: true,
-            onTap: () => setState(() => _selected = i),
-          );
-        },
-      )),
-      const VerticalDivider(width: 1),
-      Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Pregled ${_PatientDetailsScreenState.fmtDateTime(e.appointmentDate)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4),
-        Text('dr. ${e.doctorName ?? ''}${e.specialization == null ? '' : ' • ${e.specialization}'}', style: const TextStyle(color: Colors.black54)),
-        const Divider(height: 28),
-        _section(Icons.healing, 'Dijagnoza', e.diagnosis),
-        _section(Icons.medical_services, 'Terapija', e.therapy),
-        _section(Icons.notes, 'Napomene', e.notes),
-        const Row(children: [Icon(Icons.medication, size: 18, color: Color(0xFF2E7D32)), SizedBox(width: 8), Text('E-recept', style: TextStyle(fontWeight: FontWeight.w600))]),
-        const SizedBox(height: 6),
-        if (e.prescription == null)
-          const Text('Na ovom pregledu nije izdat recept.', style: TextStyle(color: Colors.black54))
-        else
-          PrescriptionTable(prescription: e.prescription!),
-      ]))),
-    ]);
-  }
-
-  Widget _section(IconData icon, String title, String? text) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [Icon(icon, size: 18, color: const Color(0xFF2E7D32)), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.w600))]),
-          const SizedBox(height: 4),
-          Text((text?.trim().isEmpty ?? true) ? '-' : text!),
-        ]),
-      );
-}
-
-class PrescriptionTable extends StatelessWidget {
-  final Prescription prescription;
-  const PrescriptionTable({super.key, required this.prescription});
-
-  @override
-  Widget build(BuildContext context) => DataTable(
-        headingRowHeight: 36,
-        dataRowMinHeight: 32,
-        dataRowMaxHeight: 40,
-        columns: const [
-          DataColumn(label: Text('Lijek')),
-          DataColumn(label: Text('Doza')),
-          DataColumn(label: Text('Učestalost')),
-          DataColumn(label: Text('Trajanje')),
-        ],
-        rows: prescription.items.map((i) => DataRow(cells: [
-          DataCell(Text(i.medication)),
-          DataCell(Text(i.dosage ?? '-')),
-          DataCell(Text(i.frequency ?? '-')),
-          DataCell(Text(i.duration ?? '-')),
-        ])).toList(),
-      );
-}
-
-class _PrescriptionsTab extends StatelessWidget {
-  final List<Prescription> prescriptions;
-  const _PrescriptionsTab({required this.prescriptions});
-
-  @override
-  Widget build(BuildContext context) {
-    if (prescriptions.isEmpty) return const Center(child: Text('Pacijentu nije izdat nijedan recept.'));
-    final sorted = [...prescriptions]..sort((a, b) => b.issuedAt.compareTo(a.issuedAt));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: sorted.length,
-      separatorBuilder: (_, __) => const Divider(height: 32),
-      itemBuilder: (c, i) {
-        final p = sorted[i];
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Recept od ${_PatientDetailsScreenState.fmtDate(p.issuedAt)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-          Text('Izdao: dr. ${p.doctorName ?? ''}', style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 8),
-          PrescriptionTable(prescription: p),
-        ]);
-      },
-    );
-  }
-}
-
-class _LabResultsTab extends StatelessWidget {
-  final List<LabResult> results;
-  const _LabResultsTab({required this.results});
-
-  @override
-  Widget build(BuildContext context) {
-    if (results.isEmpty) return const Center(child: Text('Pacijent nema laboratorijskih nalaza.'));
-    return ListView.separated(
-      itemCount: results.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
-      itemBuilder: (c, i) {
-        final r = results[i];
-        return ListTile(
-          leading: const Icon(Icons.science, color: Color(0xFF2E7D32)),
-          title: Text(r.title),
-          subtitle: Text(r.notes ?? ''),
-          trailing: Text(_PatientDetailsScreenState.fmtDate(r.createdAt)),
-        );
-      },
-    );
   }
 }

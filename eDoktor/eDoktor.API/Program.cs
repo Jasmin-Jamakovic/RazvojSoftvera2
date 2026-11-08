@@ -5,6 +5,7 @@ using eDoktor.Services.Appointments;
 using eDoktor.Services.AppointmentStateMachine;
 using eDoktor.Services.Auth;
 using eDoktor.Services.Cities;
+using eDoktor.Services.Countries;
 using eDoktor.Services.Clinics;
 using eDoktor.Services.Dashboard;
 using eDoktor.Services.Database;
@@ -154,6 +155,7 @@ builder.Services.AddSingleton<IRabbitMQService, RabbitMQService>();
 // Domain services
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ISpecializationService, SpecializationService>();
+builder.Services.AddScoped<ICountryService, CountryService>();
 builder.Services.AddScoped<ICityService, CityService>();
 builder.Services.AddScoped<IClinicService, ClinicService>();
 builder.Services.AddScoped<IDoctorService, DoctorService>();

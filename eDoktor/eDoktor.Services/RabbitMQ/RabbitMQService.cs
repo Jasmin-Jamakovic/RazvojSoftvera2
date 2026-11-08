@@ -45,6 +45,13 @@ namespace eDoktor.Services.RabbitMQ
             if (_channel is { IsOpen: true }) return _channel;
 
             _declaredQueues.Clear();
+            // Release a dead connection before opening a new one, so sockets don't leak on every reconnect.
+            if (_connection != null)
+            {
+                try { _connection.Close(); _connection.Dispose(); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Old RabbitMQ connection was already closed."); }
+                _connection = null;
+            }
             var delay = TimeSpan.FromSeconds(1);
             for (var attempt = 1; ; attempt++)
             {
@@ -85,7 +92,8 @@ namespace eDoktor.Services.RabbitMQ
                 // The broker closes the channel on errors; drop it so the next publish reconnects.
                 _logger.LogError(ex, "Publishing to queue '{Queue}' failed; the message was not sent.", queue);
                 _declaredQueues.Clear();
-                try { _channel?.Dispose(); } catch { /* channel already closed by the broker */ }
+                try { _channel?.Dispose(); }
+                catch (Exception closeEx) { _logger.LogDebug(closeEx, "RabbitMQ channel was already closed."); }
                 _channel = null;
                 return false;
             }

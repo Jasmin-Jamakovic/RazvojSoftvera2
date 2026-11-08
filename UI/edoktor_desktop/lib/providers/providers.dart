@@ -1,14 +1,15 @@
+import 'dart:convert';
 import 'package:flutter/material.dart' show DateTimeRange;
 import 'package:flutter/foundation.dart';
 import '../models/dashboard.dart';
 import '../models/entities.dart';
 import '../models/medical_record.dart';
+import '../models/notification_item.dart';
 import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/auth_store.dart';
 
 class AuthProvider extends ChangeNotifier {
-  bool get isLoggedIn => AuthStore.token != null;
   User? get user => AuthStore.user;
 
   Future<void> login(String username, String password) async {
@@ -52,21 +53,27 @@ class SpecializationProvider extends ChangeNotifier {
   }
   Future<void> upsert({int? id, required String name, String? description}) async {
     final body = {'name': name, 'description': description};
-    if (id == null) await ApiClient.post('/api/specializations', body);
-    else await ApiClient.put('/api/specializations/$id', body);
+    if (id == null) {
+      await ApiClient.post('/api/specializations', body);
+    } else {
+      await ApiClient.put('/api/specializations/$id', body);
+    }
   }
   Future<void> delete(int id) => ApiClient.delete('/api/specializations/$id');
 }
 
 class ClinicProvider extends ChangeNotifier {
-  Future<List<Clinic>> list({String? name, int? cityId}) async {
-    final res = await ApiClient.get('/api/clinics', query: {'name': name?.isEmpty == true ? null : name, 'cityId': cityId, 'pageSize': 100});
+  Future<List<Clinic>> list({String? name}) async {
+    final res = await ApiClient.get('/api/clinics', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
     return (res['items'] as List? ?? []).map((e) => Clinic.fromJson(e)).toList();
   }
   Future<void> upsert({int? id, required String name, required String address, required int cityId, double? latitude, double? longitude}) async {
     final body = {'name': name, 'address': address, 'cityId': cityId, 'latitude': latitude, 'longitude': longitude};
-    if (id == null) await ApiClient.post('/api/clinics', body);
-    else await ApiClient.put('/api/clinics/$id', body);
+    if (id == null) {
+      await ApiClient.post('/api/clinics', body);
+    } else {
+      await ApiClient.put('/api/clinics/$id', body);
+    }
   }
   Future<void> delete(int id) => ApiClient.delete('/api/clinics/$id');
 
@@ -77,22 +84,41 @@ class ClinicProvider extends ChangeNotifier {
   }
 }
 
+class CountryProvider extends ChangeNotifier {
+  Future<List<Country>> list({String? name}) async {
+    final res = await ApiClient.get('/api/countries', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
+    return (res['items'] as List? ?? []).map((e) => Country.fromJson(e)).toList();
+  }
+  Future<void> upsert({int? id, required String name}) async {
+    final body = {'name': name};
+    if (id == null) {
+      await ApiClient.post('/api/countries', body);
+    } else {
+      await ApiClient.put('/api/countries/$id', body);
+    }
+  }
+  Future<void> delete(int id) => ApiClient.delete('/api/countries/$id');
+}
+
 class CityProvider extends ChangeNotifier {
-  Future<List<City>> list({String? name}) async {
-    final res = await ApiClient.get('/api/cities', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
+  Future<List<City>> list({String? name, int? countryId}) async {
+    final res = await ApiClient.get('/api/cities', query: {'name': name?.isEmpty == true ? null : name, 'countryId': countryId, 'pageSize': 100});
     return (res['items'] as List? ?? []).map((e) => City.fromJson(e)).toList();
   }
-  Future<void> upsert({int? id, required String name, String? country}) async {
-    final body = {'name': name, 'country': country};
-    if (id == null) await ApiClient.post('/api/cities', body);
-    else await ApiClient.put('/api/cities/$id', body);
+  Future<void> upsert({int? id, required String name, required int countryId}) async {
+    final body = {'name': name, 'countryId': countryId};
+    if (id == null) {
+      await ApiClient.post('/api/cities', body);
+    } else {
+      await ApiClient.put('/api/cities/$id', body);
+    }
   }
   Future<void> delete(int id) => ApiClient.delete('/api/cities/$id');
 }
 
 class DoctorProvider extends ChangeNotifier {
-  Future<List<Doctor>> list({String? name, int? specializationId}) async {
-    final res = await ApiClient.get('/api/doctors', query: {'name': name?.isEmpty == true ? null : name, 'specializationId': specializationId, 'pageSize': 100});
+  Future<List<Doctor>> list({String? name}) async {
+    final res = await ApiClient.get('/api/doctors', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
     return (res['items'] as List? ?? []).map((e) => Doctor.fromJson(e)).toList();
   }
   Future<Doctor> create(Map<String, dynamic> body) async {
@@ -140,12 +166,6 @@ class PatientProvider extends ChangeNotifier {
     return (res['items'] as List? ?? []).map((e) => User.fromJson(e)).toList();
   }
 
-  /// Null when the patient has no medical record yet.
-  Future<MedicalRecord?> medicalRecord(int patientId) async {
-    final res = await ApiClient.get('/api/medical-records/patient/$patientId');
-    return res == null ? null : MedicalRecord.fromJson(res);
-  }
-
   Future<PagedList<Appointment>> visits(int patientId, {int page = 0, int pageSize = 10}) async {
     final res = await ApiClient.get('/api/appointments', query: {'patientId': patientId, 'page': page, 'pageSize': pageSize});
     final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
@@ -153,7 +173,104 @@ class PatientProvider extends ChangeNotifier {
   }
 }
 
+/// A patient's electronic medical record: header, paged visits / prescriptions / lab results and their CRUD.
+class MedicalRecordProvider extends ChangeNotifier {
+  static const _base = '/api/medical-records';
+
+  /// Null when the patient has no medical record yet.
+  Future<MedicalRecordHeader?> header(int patientId) async {
+    final res = await ApiClient.get('$_base/patient/$patientId');
+    return res == null ? null : MedicalRecordHeader.fromJson(res);
+  }
+
+  Future<PagedList<T>> _paged<T>(String path, T Function(Map<String, dynamic>) map, int page, int pageSize, String? search) async {
+    final res = await ApiClient.get(path, query: {
+      'page': page, 'pageSize': pageSize, 'search': search?.trim().isEmpty == true ? null : search?.trim(),
+    });
+    final items = (res['items'] as List? ?? []).map((e) => map(e as Map<String, dynamic>)).toList();
+    return PagedList(items, res['totalCount'] ?? items.length);
+  }
+
+  Future<PagedList<RecordEntry>> entries(int patientId, {int page = 0, int pageSize = 5, String? search}) =>
+      _paged('$_base/patient/$patientId/entries', RecordEntry.fromJson, page, pageSize, search);
+  Future<PagedList<Prescription>> prescriptions(int patientId, {int page = 0, int pageSize = 5, String? search}) =>
+      _paged('$_base/patient/$patientId/prescriptions', Prescription.fromJson, page, pageSize, search);
+  Future<PagedList<LabResult>> labResults(int patientId, {int page = 0, int pageSize = 10, String? search}) =>
+      _paged('$_base/patient/$patientId/lab-results', LabResult.fromJson, page, pageSize, search);
+
+  /// Ids of the appointments that already have a visit written into the record.
+  Future<Set<int>> entryAppointmentIds(int patientId) async {
+    const pageSize = 100;
+    final ids = <int>{};
+    for (var page = 0;; page++) {
+      final p = await entries(patientId, page: page, pageSize: pageSize);
+      ids.addAll(p.items.map((e) => e.appointmentId));
+      if (p.items.length < pageSize) break;
+    }
+    return ids;
+  }
+
+  Map<String, dynamic> _entryBody(int appointmentId, String diagnosis, String? therapy, String? notes) =>
+      {'appointmentId': appointmentId, 'diagnosis': diagnosis, 'therapy': therapy, 'notes': notes};
+  Future<void> addEntry({required int appointmentId, required String diagnosis, String? therapy, String? notes}) =>
+      ApiClient.post('$_base/entries', _entryBody(appointmentId, diagnosis, therapy, notes));
+  Future<void> updateEntry(int id, {required int appointmentId, required String diagnosis, String? therapy, String? notes}) =>
+      ApiClient.put('$_base/entries/$id', _entryBody(appointmentId, diagnosis, therapy, notes));
+  Future<void> deleteEntry(int id) => ApiClient.delete('$_base/entries/$id');
+
+  Future<void> addPrescription({required int entryId, required List<PrescriptionItem> items}) =>
+      ApiClient.post('$_base/prescriptions', {'medicalRecordEntryId': entryId, 'items': items.map((i) => i.toJson()).toList()});
+  Future<void> updatePrescription(int id, {required int entryId, required List<PrescriptionItem> items}) =>
+      ApiClient.put('$_base/prescriptions/$id', {'medicalRecordEntryId': entryId, 'items': items.map((i) => i.toJson()).toList()});
+  Future<void> deletePrescription(int id) => ApiClient.delete('$_base/prescriptions/$id');
+
+  Future<void> addLabResult({required int patientId, required String title, String? notes}) =>
+      ApiClient.post('$_base/lab-results', {'patientId': patientId, 'title': title, 'notes': notes});
+  Future<void> updateLabResult(int id, {required int patientId, required String title, String? notes}) =>
+      ApiClient.put('$_base/lab-results/$id', {'patientId': patientId, 'title': title, 'notes': notes});
+  Future<void> deleteLabResult(int id) => ApiClient.delete('$_base/lab-results/$id');
+}
+
 class AppointmentProvider extends ChangeNotifier {
+  /// One page of appointments (for a doctor the API returns only their own).
+  Future<PagedList<Appointment>> list({String? status, DateTime? from, DateTime? to, int page = 0, int pageSize = 20}) async {
+    final res = await ApiClient.get('/api/appointments', query: {
+      'status': status, 'from': from?.toUtc().toIso8601String(), 'to': to?.toUtc().toIso8601String(),
+      'page': page, 'pageSize': pageSize,
+    });
+    final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+    return PagedList(items, res['totalCount'] ?? items.length);
+  }
+
+  /// Every appointment with [patientId] (for a doctor: only the ones with that doctor).
+  Future<List<Appointment>> forPatient(int patientId) async {
+    const pageSize = 100;
+    final all = <Appointment>[];
+    for (var page = 0;; page++) {
+      final res = await ApiClient.get('/api/appointments', query: {'patientId': patientId, 'page': page, 'pageSize': pageSize});
+      final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+      all.addAll(items);
+      if (items.length < pageSize) break;
+    }
+    return all;
+  }
+
+  /// Consultation chat: newest first, so page 0 is the latest part of the conversation.
+  Future<PagedList<ConsultationMessage>> messages(int appointmentId, {int page = 0, int pageSize = 30}) async {
+    final res = await ApiClient.get('/api/video-calls/$appointmentId/messages', query: {'page': page, 'pageSize': pageSize});
+    final items = (res['items'] as List? ?? []).map((e) => ConsultationMessage.fromJson(e)).toList();
+    return PagedList(items, res['totalCount'] ?? items.length);
+  }
+
+  Future<ConsultationMessage> sendMessage(int appointmentId, {String? text, Uint8List? image}) async {
+    final res = await ApiClient.post('/api/video-calls/$appointmentId/messages', {
+      'text': text, if (image != null) 'image': base64Encode(image),
+    });
+    return ConsultationMessage.fromJson(res);
+  }
+
+  String messageImagePath(int appointmentId, int messageId) => '/api/video-calls/$appointmentId/messages/$messageId/image';
+
   /// Every appointment matching the filters, fetched page by page (the API caps a page at 100).
   Future<List<Appointment>> listAll({String? status, DateTime? from, DateTime? to}) async {
     const pageSize = 100;

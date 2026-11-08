@@ -31,6 +31,9 @@ namespace eDoktor.Services.PayPal
         private readonly HttpClient _http;
         private readonly PayPalOptions _opts;
         private readonly ILogger<PayPalService> _logger;
+
+        /// Capture ids of the demo payments written by DataSeeder.
+        public const string SeedCapturePrefix = "SEED-CAPTURE-";
         private string? _accessToken;
         private DateTime _tokenExpiry = DateTime.MinValue;
 
@@ -61,7 +64,7 @@ namespace eDoktor.Services.PayPal
                 Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_opts.ClientId}:{_opts.ClientSecret}")));
             req.Content = new StringContent("grant_type=client_credentials", Encoding.UTF8, "application/x-www-form-urlencoded");
 
-            var resp = await _http.SendAsync(req);
+            using var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw Failure("authenticate", resp, body);
@@ -104,7 +107,7 @@ namespace eDoktor.Services.PayPal
             };
             req.Content = new StringContent(JsonConvert.SerializeObject(orderBody), Encoding.UTF8, "application/json");
 
-            var resp = await _http.SendAsync(req);
+            using var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw Failure("create order", resp, body);
@@ -128,7 +131,7 @@ namespace eDoktor.Services.PayPal
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             req.Content = new StringContent("{}", Encoding.UTF8, "application/json");
 
-            var resp = await _http.SendAsync(req);
+            using var resp = await _http.SendAsync(req);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw Failure("capture", resp, body);
@@ -174,7 +177,7 @@ namespace eDoktor.Services.PayPal
                 + "}";
             req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
-            var resp = await _http.SendAsync(req);
+            using var resp = await _http.SendAsync(req);
             if (!resp.IsSuccessStatusCode) return false;
             var body = await resp.Content.ReadAsStringAsync();
             var data = JObject.Parse(body);
@@ -183,6 +186,14 @@ namespace eDoktor.Services.PayPal
 
         public async Task<bool> RefundAsync(string captureId, decimal? amount = null, string? reason = null)
         {
+            // Demo payments created by the DataSeeder were never charged through PayPal, so there is nothing to
+            // send back; their refund is only recorded locally (the cancel/refund flow still works on seed data).
+            if (captureId.StartsWith(SeedCapturePrefix, StringComparison.Ordinal))
+            {
+                _logger.LogInformation("Seeded demo payment {CaptureId} refunded locally (never charged via PayPal).", captureId);
+                return true;
+            }
+
             var token = await GetAccessTokenAsync();
             using var req = new HttpRequestMessage(HttpMethod.Post, $"/v2/payments/captures/{captureId}/refund");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -192,7 +203,7 @@ namespace eDoktor.Services.PayPal
                 : new { note_to_payer = reason };
             req.Content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
 
-            var resp = await _http.SendAsync(req);
+            using var resp = await _http.SendAsync(req);
             if (!resp.IsSuccessStatusCode)
                 _logger.LogError("PayPal refund of capture {CaptureId} failed: {Status} {Body}",
                     captureId, (int)resp.StatusCode, await resp.Content.ReadAsStringAsync());

@@ -1,3 +1,4 @@
+/// The record "header"; visits, prescriptions and lab results are loaded page by page from their own endpoints.
 class MedicalRecord {
   final int id;
   final int patientId;
@@ -5,13 +6,13 @@ class MedicalRecord {
   final String? bloodType;
   final String? allergies;
   final DateTime? dateOfBirth;
-  final List<MedicalRecordEntry> entries;
-  final List<LabResult> labResults;
-  final List<Prescription> prescriptions;
+  final int entryCount;
+  final int prescriptionCount;
+  final int labResultCount;
 
   MedicalRecord({
     required this.id, required this.patientId, this.patientName, this.bloodType, this.allergies, this.dateOfBirth,
-    required this.entries, required this.labResults, required this.prescriptions,
+    this.entryCount = 0, this.prescriptionCount = 0, this.labResultCount = 0,
   });
 
   factory MedicalRecord.fromJson(Map<String, dynamic> j) => MedicalRecord(
@@ -21,14 +22,16 @@ class MedicalRecord {
         bloodType: j['bloodType'],
         allergies: j['allergies'],
         dateOfBirth: j['dateOfBirth'] == null ? null : DateTime.tryParse(j['dateOfBirth']),
-        entries: (j['entries'] as List? ?? []).map((e) => MedicalRecordEntry.fromJson(e)).toList(),
-        labResults: (j['labResults'] as List? ?? []).map((e) => LabResult.fromJson(e)).toList(),
-        prescriptions: (j['prescriptions'] as List? ?? []).map((e) => Prescription.fromJson(e)).toList(),
+        entryCount: j['entryCount'] ?? 0,
+        prescriptionCount: j['prescriptionCount'] ?? 0,
+        labResultCount: j['labResultCount'] ?? 0,
       );
 }
 
 class MedicalRecordEntry {
   final int id;
+  final int? appointmentId;
+  final int? doctorId;
   final DateTime appointmentDate;
   final String? doctorName;
   final String? specialization;
@@ -38,12 +41,14 @@ class MedicalRecordEntry {
   final Prescription? prescription;
 
   MedicalRecordEntry({
-    required this.id, required this.appointmentDate, this.doctorName, this.specialization,
+    required this.id, this.appointmentId, this.doctorId, required this.appointmentDate, this.doctorName, this.specialization,
     this.diagnosis, this.therapy, this.notes, this.prescription,
   });
 
   factory MedicalRecordEntry.fromJson(Map<String, dynamic> j) => MedicalRecordEntry(
         id: j['id'],
+        appointmentId: j['appointmentId'],
+        doctorId: j['doctorId'],
         appointmentDate: DateTime.parse(j['appointmentDate']).toLocal(),
         doctorName: j['doctorName'],
         specialization: j['specialization'],
@@ -58,13 +63,15 @@ class Prescription {
   final int id;
   final int appointmentId;
   final String? doctorName;
+  final String? diagnosis;
   final DateTime issuedAt;
   final List<PrescriptionItem> items;
-  Prescription({required this.id, required this.appointmentId, this.doctorName, required this.issuedAt, required this.items});
+  Prescription({required this.id, required this.appointmentId, this.doctorName, this.diagnosis, required this.issuedAt, required this.items});
   factory Prescription.fromJson(Map<String, dynamic> j) => Prescription(
         id: j['id'],
         appointmentId: j['appointmentId'] ?? 0,
         doctorName: j['doctorName'],
+        diagnosis: j['diagnosis'],
         issuedAt: DateTime.parse(j['issuedAt']).toLocal(),
         items: (j['items'] as List? ?? []).map((e) => PrescriptionItem.fromJson(e)).toList(),
       );
@@ -90,12 +97,14 @@ class LabResult {
   final int id;
   final String title;
   final String? notes;
+  final String? createdByName;
   final DateTime createdAt;
-  LabResult({required this.id, required this.title, this.notes, required this.createdAt});
+  LabResult({required this.id, required this.title, this.notes, this.createdByName, required this.createdAt});
   factory LabResult.fromJson(Map<String, dynamic> j) => LabResult(
         id: j['id'],
         title: j['title'] ?? '',
         notes: j['notes'],
+        createdByName: j['createdByName'],
         createdAt: DateTime.parse(j['createdAt']).toLocal(),
       );
 }

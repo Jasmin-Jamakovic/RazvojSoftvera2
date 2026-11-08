@@ -9,7 +9,9 @@ namespace eDoktor.Services.TimeSlots
     public interface ITimeSlotService
     {
         Task<List<TimeSlotResponse>> GetAsync(TimeSlotSearchObject search);
+        Task<TimeSlotResponse> GetByIdAsync(int id);
         Task<int> GenerateAsync(TimeSlotGenerateRequest req);
+        Task<TimeSlotResponse> UpdateAsync(int id, TimeSlotUpdateRequest req);
         Task DeleteAsync(int id);
     }
 }

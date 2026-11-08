@@ -20,5 +20,10 @@ namespace eDoktor.Services.Database.Entities
         public string? Notes { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Who entered the result (a doctor or admin); only they or an admin may change it.
+        public int? CreatedById { get; set; }
+        [ForeignKey(nameof(CreatedById))]
+        public virtual User? CreatedBy { get; set; }
     }
 }

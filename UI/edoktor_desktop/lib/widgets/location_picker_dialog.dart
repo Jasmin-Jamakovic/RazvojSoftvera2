@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../models/entities.dart';
 import '../providers/providers.dart';
+import '../utils/api_config.dart';
 
 /// Picks a clinic's coordinates: click on the map, or look the address up and choose a result.
 /// Returns the chosen point, or null when cancelled.
@@ -95,7 +96,7 @@ class _LocationPickerDialogState extends State<LocationPickerDialog> {
               onTap: (_, p) => setState(() => _point = p),
             ),
             children: [
-              TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.edoktor.admin'),
+              TileLayer(urlTemplate: ApiConfig.mapTileUrl, userAgentPackageName: 'com.edoktor.admin'),
               if (_point != null)
                 MarkerLayer(markers: [
                   Marker(point: _point!, width: 40, height: 40, alignment: Alignment.topCenter,

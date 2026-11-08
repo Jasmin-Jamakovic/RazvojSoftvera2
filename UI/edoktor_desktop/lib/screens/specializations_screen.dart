@@ -23,10 +23,13 @@ class _SpecializationsScreenState extends State<SpecializationsScreen> {
     final formKey = GlobalKey<FormState>();
     final name = TextEditingController(text: s?.name ?? '');
     final desc = TextEditingController(text: s?.description ?? '');
-    final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
+    final provider = context.read<SpecializationProvider>();
+    var saving = false;
+    String? error;
+    final ok = await showDialog<bool>(context: context, builder: (c) => StatefulBuilder(builder: (c, setLocal) => AlertDialog(
       title: Row(children: [
         Expanded(child: Text(s == null ? 'Nova specijalizacija' : 'Uredi specijalizaciju')),
-        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: () => Navigator.pop(c, false)),
+        IconButton(icon: const Icon(Icons.close), tooltip: 'Zatvori', onPressed: saving ? null : () => Navigator.pop(c, false)),
       ]),
       content: SizedBox(width: 400, child: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextFormField(controller: name, autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -36,20 +39,31 @@ class _SpecializationsScreenState extends State<SpecializationsScreen> {
         TextFormField(controller: desc, maxLines: 3, autovalidateMode: AutovalidateMode.onUserInteraction,
           decoration: const InputDecoration(labelText: 'Opis'),
           validator: (v) => Validators.maxLen(v, 500, 'Opis')),
+        if (error != null)
+          Padding(padding: const EdgeInsets.only(top: 12),
+            child: Align(alignment: Alignment.centerLeft, child: Text(error!, style: const TextStyle(color: Colors.red)))),
       ]))),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Odustani')),
-        FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(c, true); }, child: const Text('Sačuvaj')),
+        TextButton(onPressed: saving ? null : () => Navigator.pop(c, false), child: const Text('Odustani')),
+        FilledButton(
+          onPressed: saving ? null : () async {
+            if (!formKey.currentState!.validate()) return;
+            setLocal(() { saving = true; error = null; });
+            try {
+              await provider.upsert(id: s?.id, name: name.text.trim(), description: desc.text.trim());
+              if (c.mounted) Navigator.pop(c, true);
+            } catch (e) {
+              if (c.mounted) setLocal(() { saving = false; error = '$e'; });
+            }
+          },
+          child: saving
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Sačuvaj')),
       ],
-    ));
-    if (ok == true) {
-      try {
-        await context.read<SpecializationProvider>().upsert(id: s?.id, name: name.text.trim(), description: desc.text.trim());
-        _refresh();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s == null ? 'Specijalizacija je uspješno dodana.' : 'Specijalizacija je uspješno ažurirana.')));
-      }
-      catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
-    }
+    )));
+    if (ok != true || !mounted) return;
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s == null ? 'Specijalizacija je uspješno dodana.' : 'Specijalizacija je uspješno ažurirana.')));
   }
 
   Future<void> _confirmDelete(Specialization x) async {
@@ -61,8 +75,12 @@ class _SpecializationsScreenState extends State<SpecializationsScreen> {
         FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(c, true), child: const Text('Obriši')),
       ],
     ));
-    if (ok != true) return;
-    try { await context.read<SpecializationProvider>().delete(x.id); _refresh(); }
+    if (ok != true || !mounted) return;
+    try {
+      await context.read<SpecializationProvider>().delete(x.id);
+      _refresh();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Specijalizacija je uspješno obrisana.')));
+    }
     catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e'))); }
   }
 

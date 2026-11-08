@@ -20,6 +20,7 @@ dependencies:
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
   file_picker: ^13.1.0
+  signalr_netcore: ^1.4.0
 
 dev_dependencies:
   flutter_test:

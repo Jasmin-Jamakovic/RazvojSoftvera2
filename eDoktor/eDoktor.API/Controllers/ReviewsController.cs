@@ -20,6 +20,16 @@ namespace eDoktor.API.Controllers
         [HttpGet]
         public Task<PagedResult<ReviewResponse>> Get([FromQuery] ReviewSearchObject s) => _reviews.GetAsync(s ?? new());
 
+        [HttpGet("{id}")]
+        public Task<ReviewResponse> GetById(int id) => _reviews.GetByIdAsync(id);
+
+        [HttpPut("{id}"), Authorize(Roles = Roles.Patient)]
+        public async Task<ReviewResponse> Update(int id, ReviewUpsertRequest req)
+        {
+            var uid = await _current.GetUserIdAsync() ?? throw new UserException("Niste prijavljeni.");
+            return await _reviews.UpdateAsync(id, req, uid);
+        }
+
         [HttpPost]
         public async Task<ReviewResponse> Create(ReviewUpsertRequest req)
         {

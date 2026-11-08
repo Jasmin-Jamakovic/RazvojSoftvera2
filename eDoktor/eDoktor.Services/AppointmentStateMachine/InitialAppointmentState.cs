@@ -28,6 +28,8 @@ namespace eDoktor.Services.AppointmentStateMachine
             if (slot.StartUtc < DateTime.UtcNow) throw new UserException("Nije moguće zakazati termin u prošlosti.");
             if (!Enum.IsDefined(typeof(AppointmentType), req.Type)) throw new UserException("Nepoznata vrsta pregleda.");
 
+            await EnsureNoOverlapAsync(patientId, slot);
+
             var doctor = await _context.Doctors.FirstOrDefaultAsync(d => d.Id == req.DoctorId && !d.IsDeleted)
                 ?? throw new NotFoundException("Ljekar nije pronađen.");
 
@@ -49,9 +51,11 @@ namespace eDoktor.Services.AppointmentStateMachine
             {
                 slot.IsBooked = true;
                 _context.Appointments.Add(appt);
-                await _context.SaveChangesAsync();
+                await SaveSlotChangesAsync();
                 await NotifyAsync(appt.PatientId, "Termin zakazan",
                     $"Vaš termin kod dr. {doctorUser?.FirstName} {doctorUser?.LastName} ({DisplayTime.Format(slot.StartUtc)}) je zakazan i čeka potvrdu.");
+                await NotifyAsync(doctor.UserId, "Novi termin",
+                    $"Pacijent {patient?.FirstName} {patient?.LastName} je zakazao termin za {DisplayTime.Format(slot.StartUtc)}.");
             });
 
             // Messages leave the system only after the booking is committed.

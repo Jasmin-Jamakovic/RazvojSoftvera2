@@ -12,6 +12,8 @@ class NotificationProvider extends ChangeNotifier {
   List<NotificationItem> get items => _items;
   int get unreadCount => _items.where((n) => !n.isRead).length;
   HubConnection? _hub;
+  Timer? _poll;
+  static const _pollInterval = Duration(seconds: 30);
   final _consultation = StreamController<ConsultationMessage>.broadcast();
 
   /// Chat messages of online consultations, pushed in real time over the same SignalR connection.
@@ -34,6 +36,7 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   Future<void> connectSignalR() async {
+    await disconnect(); // never keep a connection/timer from a previous session
     final token = AuthStore.token;
     if (token == null) return;
     final url = '${ApiConfig.baseUrl}/hubs/notifications?access_token=$token';
@@ -48,11 +51,50 @@ class NotificationProvider extends ChangeNotifier {
         _consultation.add(ConsultationMessage.fromJson(Map<String, dynamic>.from(args.first as Map)));
       }
     });
-    try { await _hub!.start(); } catch (_) {}
+    try {
+      await _hub!.start();
+    } catch (e) {
+      debugPrint('SignalR connection failed, falling back to polling every ${_pollInterval.inSeconds}s: $e');
+      _startPolling();
+    }
   }
 
+  /// Fallback when real-time push is unavailable: reload notifications periodically.
+  void _startPolling() {
+    _poll?.cancel();
+    _poll = Timer.periodic(_pollInterval, (_) async {
+      if (AuthStore.token == null) {
+        _poll?.cancel();
+        _poll = null;
+        return;
+      }
+      try {
+        await load();
+      } catch (e) {
+        debugPrint('Notification polling failed: $e');
+      }
+    });
+  }
+
+  /// Stops the SignalR connection and the polling timer (on logout / session expiry).
   Future<void> disconnect() async {
-    await _hub?.stop();
+    _poll?.cancel();
+    _poll = null;
+    final hub = _hub;
     _hub = null;
+    if (hub == null) return;
+    try {
+      await hub.stop();
+    } catch (e) {
+      debugPrint('SignalR disconnect failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _hub?.stop();
+    _consultation.close();
+    super.dispose();
   }
 }

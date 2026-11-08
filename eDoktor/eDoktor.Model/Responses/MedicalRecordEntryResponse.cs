@@ -6,7 +6,9 @@ namespace eDoktor.Model.Responses
     {
         public int Id { get; set; }
         public int MedicalRecordId { get; set; }
+        public int PatientId { get; set; }
         public int AppointmentId { get; set; }
+        public int DoctorId { get; set; }
         public DateTime AppointmentDate { get; set; }
         public string? DoctorName { get; set; }
         public string? Specialization { get; set; }

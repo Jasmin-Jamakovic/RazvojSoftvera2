@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env-tajne.zip
 appsettings.Development.json
 
 # Build results

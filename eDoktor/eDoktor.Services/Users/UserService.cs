@@ -91,8 +91,9 @@ namespace eDoktor.Services.Users
             if (req.PhoneNumber != null) u.PhoneNumber = req.PhoneNumber;
             if (req.DateOfBirth.HasValue) u.DateOfBirth = req.DateOfBirth;
             if (req.Gender != null) u.Gender = req.Gender;
-            if (req.BloodType != null) u.BloodType = req.BloodType;
-            if (req.Allergies != null) u.Allergies = req.Allergies;
+            // null = "not sent, keep as is"; "" = "the user cleared it" (e.g. blood type "Nije poznata").
+            if (req.BloodType != null) u.BloodType = string.IsNullOrWhiteSpace(req.BloodType) ? null : req.BloodType.Trim();
+            if (req.Allergies != null) u.Allergies = string.IsNullOrWhiteSpace(req.Allergies) ? null : req.Allergies.Trim();
             if (req.CityId.HasValue) u.CityId = req.CityId;
             if (req.Latitude.HasValue) u.Latitude = req.Latitude;
             if (req.Longitude.HasValue) u.Longitude = req.Longitude;

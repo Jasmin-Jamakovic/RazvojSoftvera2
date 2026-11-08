@@ -80,7 +80,7 @@ class RecordDetailsScreen extends StatefulWidget {
         title: 'Laboratorijski nalaz',
         icon: Icons.description_outlined,
         heading: l.title,
-        subtitle: _date.format(l.createdAt),
+        subtitle: [_date.format(l.createdAt), l.createdByName].whereType<String>().join(' · '),
         body: (c) => [_Section(icon: Icons.science_outlined, title: 'Rezultat i napomene', text: l.notes)],
         buildPdf: () => RecordPdf.labResult(r, l),
         pdfFileName: 'nalaz-${DateFormat('yyyy-MM-dd').format(l.createdAt)}.pdf',

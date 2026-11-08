@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using eDoktor.Model;
 using eDoktor.Model.Messages;
 using eDoktor.Model.Responses;
+using eDoktor.Services.Appointments;
 using eDoktor.Services.Database;
 using eDoktor.Services.PayPal;
 using eDoktor.Services.RabbitMQ;
@@ -41,54 +42,55 @@ namespace eDoktor.Services.AppointmentStateMachine
         public override async Task<AppointmentResponse> CancelAsync(int id, string? reason)
         {
             var a = await LoadAsync(id);
-            var hoursUntil = a.TimeSlot != null ? (a.TimeSlot.StartUtc - DateTime.UtcNow).TotalHours : 0;
-            var refundEligible = hoursUntil >= 24 && a.Payment?.Status == PaymentStatus.Captured;
-            var shouldRefund = refundEligible;
+            var hoursUntil = (a.TimeSlot.StartUtc - DateTime.UtcNow).TotalHours;
+            var byStaff = await IsStaffAsync();
+
+            // A patient may cancel a confirmed appointment only up to 24h before it (and then gets the money back).
+            // When the practice cancels, the patient is always refunded, whenever it happens.
+            if (!byStaff && hoursUntil < 24)
+                throw new UserException("Otkazivanje nije moguće manje od 24h prije termina.");
+
+            var payment = a.CapturedPayment();
+            var refundEligible = payment != null && !string.IsNullOrEmpty(payment.CaptureId);
+            var refunded = false;
+
+            // Refund first, outside the DB transaction: an HTTP call to PayPal must not hold the transaction open,
+            // and if the refund fails nothing has changed yet, so the appointment can't end up cancelled-but-unrefunded.
+            if (refundEligible)
+            {
+                var logger = _serviceProvider.GetRequiredService<ILogger<ConfirmedAppointmentState>>();
+                try
+                {
+                    var paypal = _serviceProvider.GetRequiredService<IPayPalService>();
+                    refunded = await paypal.RefundAsync(payment!.CaptureId!, payment.Amount, "Otkazivanje termina");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Refund failed for appointment {AppointmentId} (capture {CaptureId}).", a.Id, payment!.CaptureId);
+                }
+                if (!refunded)
+                    throw new UserException("Povrat novca nije uspio, pa termin nije otkazan. Pokušajte ponovo kasnije.");
+            }
 
             var actingUserId = await ActingUserIdAsync();
-            // Cancellation, refund bookkeeping and the in-app notification are committed together.
             await InTransactionAsync(async () =>
             {
                 a.StateMachine = nameof(CancelledAppointmentState);
                 a.CancelledAt = DateTime.UtcNow;
                 a.CancelledById = actingUserId;
                 a.CancellationReason = reason;
-                if (a.TimeSlot != null) a.TimeSlot.IsBooked = false;
-                await _context.SaveChangesAsync();
-
-                // Actually issue the PayPal refund (not just promise it by email) when eligible,
-                // then record the refund on our payment row (the gateway itself does no DB work).
-                // A failed refund must not undo the cancellation: it is logged and the payment stays "Captured",
-                // so the admin can refund it manually from the payments screen.
-                if (shouldRefund && !string.IsNullOrEmpty(a.Payment?.CaptureId))
+                a.TimeSlot.IsBooked = false;
+                if (refunded)
                 {
-                    var logger = _serviceProvider.GetRequiredService<ILogger<ConfirmedAppointmentState>>();
-                    try
-                    {
-                        var paypal = _serviceProvider.GetRequiredService<IPayPalService>();
-                        if (await paypal.RefundAsync(a.Payment.CaptureId, a.Payment.Amount, "Otkazivanje termina (≥24h prije termina)"))
-                        {
-                            a.Payment.Status = PaymentStatus.Refunded;
-                            a.Payment.RefundedAt = DateTime.UtcNow;
-                            await _context.SaveChangesAsync();
-                        }
-                        else
-                        {
-                            logger.LogWarning("PayPal refused the automatic refund for appointment {AppointmentId} (capture {CaptureId}).", a.Id, a.Payment.CaptureId);
-                            shouldRefund = false;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Automatic refund failed for appointment {AppointmentId} (capture {CaptureId}).", a.Id, a.Payment.CaptureId);
-                        shouldRefund = false;
-                    }
+                    payment!.Status = PaymentStatus.Refunded;
+                    payment.RefundedAt = DateTime.UtcNow;
                 }
+                await _context.SaveChangesAsync();
                 await NotifyAsync(a.PatientId, "Termin otkazan",
                     $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
                     + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}")
-                    + (shouldRefund ? " Novac je vraćen na vaš PayPal račun."
-                       : refundEligible ? " Povrat sredstava će biti izvršen naknadno." : ""));
+                    + (refunded ? " Novac je vraćen na vaš PayPal račun." : ""));
+                await NotifyDoctorOfCancellationAsync(a, reason, byStaff);
             });
 
             // Messages leave the system only after the cancellation is committed.
@@ -101,9 +103,9 @@ namespace eDoktor.Services.AppointmentStateMachine
                 PatientEmail = a.Patient?.Email ?? string.Empty,
                 PatientName = $"{a.Patient?.FirstName} {a.Patient?.LastName}".Trim(),
                 DoctorName = $"{a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName}".Trim(),
-                StartUtc = a.TimeSlot?.StartUtc ?? DateTime.MinValue,
+                StartUtc = a.TimeSlot.StartUtc,
                 Reason = reason,
-                ShouldRefund = shouldRefund
+                ShouldRefund = refunded
             });
 
             return await MapAfterChangeAsync(a);
