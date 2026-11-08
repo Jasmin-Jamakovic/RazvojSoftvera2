@@ -31,6 +31,10 @@ jobs:
           cache: true
 
       - run: flutter pub get
+      # The project pins an NDK version; Gradle can only install it once the SDK licences are accepted.
+      - name: Accept Android SDK licences
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+
       # The Gradle download sometimes fails with a server error, so the build is retried.
       - name: Build APK (with retries)
         run: |
