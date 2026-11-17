@@ -33,6 +33,11 @@ namespace eDoktor.Model.Responses
         // Explicit paid flag so the client can hide the pay button without inspecting payment internals.
         public bool IsPaid => Payment != null && Payment.Status == PaymentStatus.Captured;
         public string? VideoRoomId { get; set; }
+        // Set while the appointment waits for payment: after this moment the unpaid booking is cancelled
+        // automatically and its slot is released.
+        public DateTime? PaymentDueUtc { get; set; }
+        // Whether an admin refund of the captured payment is allowed (same rule the refund endpoint enforces).
+        public bool CanRefund { get; set; }
         // Rating the patient gave for this appointment; null when not reviewed yet.
         public int? ReviewRating { get; set; }
     }

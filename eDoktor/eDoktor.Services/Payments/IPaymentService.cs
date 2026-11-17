@@ -12,7 +12,14 @@ namespace eDoktor.Services.Payments
         Task<PaymentSummaryResponse> GetSummaryAsync(PaymentSearchObject search);
         Task<PayPalOrderResponse> CreateOrderAsync(PayPalCreateOrderRequest req);
         Task<PaymentResponse> CaptureAsync(string orderId);
-        Task<bool> RefundAsync(string captureId, string? reason);
+        /// Admin refund; returns the payment's new status (Refunded, or RefundPending while PayPal finishes it).
+        Task<string> RefundAsync(string captureId, string? reason);
         Task<bool> HandleWebhookAsync(IDictionary<string, string> headers, string rawBody);
+
+        /// Cancels unpaid bookings whose payment deadline has passed (after checking PayPal for a late payment).
+        Task<int> ExpireOverdueAppointmentsAsync();
+
+        /// Marks refunds that PayPal has finished since they were requested as Refunded.
+        Task<int> SettlePendingRefundsAsync();
     }
 }

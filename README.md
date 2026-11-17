@@ -136,7 +136,7 @@ To start again from an empty database: `docker compose down -v && docker compose
 - Swagger UI: <http://localhost:5190/swagger>
 - RabbitMQ admin: <http://localhost:15672> (guest / guest)
 
-> Emails are sent through SMTP with the credentials from `.env`. If `_fromAddress` / `_password` are left empty (e.g. when starting from `.env.example`), the Worker writes the emails to its log instead of sending them.
+> Emails are sent through SMTP with the credentials from `.env`. If `_fromAddress` / `_password` are left empty (e.g. when starting from `.env.example`), the Worker does not send them and only logs that an email of a given type was skipped. The message body (temporary passwords, reset codes) is never written to the log.
 
 ### Desktop app
 ```bash

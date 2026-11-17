@@ -55,7 +55,24 @@ namespace eDoktor.Services.Appointments
             if (s.From.HasValue) q = q.Where(a => a.TimeSlot.StartUtc >= s.From.Value);
             if (s.To.HasValue) q = q.Where(a => a.TimeSlot.StartUtc <= s.To.Value);
 
-            q = s.SortAscending ? q.OrderBy(a => a.TimeSlot.StartUtc) : q.OrderByDescending(a => a.TimeSlot.StartUtc);
+            const string pending = nameof(PendingAppointmentState), confirmed = nameof(ConfirmedAppointmentState);
+            var now = DateTime.UtcNow;
+            if (string.Equals(s.Period, "upcoming", StringComparison.OrdinalIgnoreCase))
+                q = q.Where(a => (a.StateMachine == pending || a.StateMachine == confirmed) && a.TimeSlot.EndUtc > now);
+            else if (string.Equals(s.Period, "past", StringComparison.OrdinalIgnoreCase))
+                q = q.Where(a => !((a.StateMachine == pending || a.StateMachine == confirmed) && a.TimeSlot.EndUtc > now));
+
+            if (!string.IsNullOrWhiteSpace(s.PatientName))
+            {
+                var name = s.PatientName.Trim();
+                q = q.Where(a => (a.Patient.FirstName + " " + a.Patient.LastName).Contains(name)
+                    || (a.Patient.LastName + " " + a.Patient.FirstName).Contains(name));
+            }
+
+            // Id as a tie-breaker keeps the order stable, so no row is skipped or repeated between pages.
+            q = s.SortAscending
+                ? q.OrderBy(a => a.TimeSlot.StartUtc).ThenBy(a => a.Id)
+                : q.OrderByDescending(a => a.TimeSlot.StartUtc).ThenByDescending(a => a.Id);
 
             s.Normalize();
             int? total = s.IncludeTotalCount ? await q.CountAsync() : null;

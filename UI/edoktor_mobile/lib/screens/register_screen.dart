@@ -26,12 +26,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? gender;
   List<City> _cities = [];
   int? _cityId;
+  bool _citiesLoading = true;
+  bool _citiesFailed = false;
   bool _busy = false; String? _error;
 
   @override
   void initState() {
     super.initState();
-    context.read<CityProvider>().list().then((c) { if (mounted) setState(() => _cities = c); });
+    _loadCities();
+  }
+
+  /// Loads the city list; on failure the field shows a message and a retry button.
+  Future<void> _loadCities() async {
+    if (!_citiesLoading) setState(() { _citiesLoading = true; _citiesFailed = false; });
+    try {
+      final c = await context.read<CityProvider>().list();
+      if (mounted) setState(() { _cities = c; _citiesLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _citiesLoading = false; _citiesFailed = true; });
+    }
   }
 
   @override
@@ -106,10 +119,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
           DropdownButtonFormField<int>(
             key: ValueKey('city-${_cities.length}'),
             initialValue: _cities.any((c) => c.id == _cityId) ? _cityId : null,
-            decoration: const InputDecoration(labelText: 'Grad', border: OutlineInputBorder()),
+            decoration: InputDecoration(
+              labelText: 'Grad',
+              border: const OutlineInputBorder(),
+              hintText: _citiesLoading ? 'Učitavanje gradova...' : null,
+            ),
             items: _cities.map((ci) => DropdownMenuItem(value: ci.id, child: Text(ci.name))).toList(),
             validator: (v) => v == null ? 'Odaberite grad.' : null,
             onChanged: (v) => setState(() => _cityId = v)),
+          if (_citiesFailed)
+            Row(children: [
+              const Expanded(child: Text('Lista gradova se nije mogla učitati. Provjerite vezu i pokušajte ponovo.',
+                  style: TextStyle(color: Colors.red))),
+              TextButton.icon(onPressed: _loadCities, icon: const Icon(Icons.refresh), label: const Text('Pokušaj ponovo')),
+            ]),
           if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: const TextStyle(color: Colors.red))],
           const SizedBox(height: 20),
           FilledButton(onPressed: _busy ? null : _submit, child: Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Text(_busy ? '...' : 'Registruj se'))),

@@ -184,30 +184,69 @@ namespace eDoktor.Services.PayPal
             return (string?)data["verification_status"] == "SUCCESS";
         }
 
-        public async Task<bool> RefundAsync(string captureId, decimal? amount = null, string? reason = null)
+        public async Task<PayPalRefundResult?> RefundAsync(string captureId, string? reason = null)
         {
             // Demo payments created by the DataSeeder were never charged through PayPal, so there is nothing to
             // send back; their refund is only recorded locally (the cancel/refund flow still works on seed data).
             if (captureId.StartsWith(SeedCapturePrefix, StringComparison.Ordinal))
             {
                 _logger.LogInformation("Seeded demo payment {CaptureId} refunded locally (never charged via PayPal).", captureId);
-                return true;
+                return new PayPalRefundResult("COMPLETED");
             }
 
             var token = await GetAccessTokenAsync();
             using var req = new HttpRequestMessage(HttpMethod.Post, $"/v2/payments/captures/{captureId}/refund");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            object payload = amount.HasValue
-                ? new { amount = new { value = amount.Value.ToString("F2", CultureInfo.InvariantCulture), currency_code = _opts.Currency }, note_to_payer = reason }
-                : new { note_to_payer = reason };
-            req.Content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
+            // No amount: PayPal refunds the full amount it actually captured, not a value we computed.
+            req.Content = new StringContent(JsonConvert.SerializeObject(new { note_to_payer = reason }), Encoding.UTF8, "application/json");
 
             using var resp = await _http.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                _logger.LogError("PayPal refund of capture {CaptureId} failed: {Status} {Body}",
-                    captureId, (int)resp.StatusCode, await resp.Content.ReadAsStringAsync());
-            return resp.IsSuccessStatusCode;
+            {
+                _logger.LogError("PayPal refund of capture {CaptureId} failed: {Status} {Body}", captureId, (int)resp.StatusCode, body);
+                return null;
+            }
+            // A 2xx only means PayPal accepted the request; the refund's own status says whether the money is back.
+            var status = (string?)JObject.Parse(body)["status"] ?? string.Empty;
+            return new PayPalRefundResult(status);
+        }
+
+        public async Task<PayPalOrderInfo?> GetOrderAsync(string orderId)
+        {
+            var token = await GetAccessTokenAsync();
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"/v2/checkout/orders/{orderId}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var resp = await _http.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            if (!resp.IsSuccessStatusCode)
+                throw Failure("get order", resp, body);
+
+            var data = JObject.Parse(body);
+            var status = (string?)data["status"] ?? string.Empty;
+            var c = data["purchase_units"]?[0]?["payments"]?["captures"]?[0];
+            PayPalCaptureResult? capture = null;
+            if (c != null && (string?)c["id"] is string captureId)
+            {
+                var value = decimal.TryParse((string?)c["amount"]?["value"], NumberStyles.Number, CultureInfo.InvariantCulture, out var v) ? v : 0m;
+                capture = new PayPalCaptureResult(captureId, (string?)c["status"] ?? string.Empty, value, (string?)c["amount"]?["currency_code"] ?? string.Empty);
+            }
+            return new PayPalOrderInfo(status, capture);
+        }
+
+        public async Task<string> GetCaptureStatusAsync(string captureId)
+        {
+            var token = await GetAccessTokenAsync();
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"/v2/payments/captures/{captureId}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+            using var resp = await _http.SendAsync(req);
+            var body = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+                throw Failure("get capture", resp, body);
+            return (string?)JObject.Parse(body)["status"] ?? string.Empty;
         }
     }
 }

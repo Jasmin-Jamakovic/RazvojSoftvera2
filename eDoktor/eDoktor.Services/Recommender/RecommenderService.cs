@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using eDoktor.Model.Responses;
+using eDoktor.Services.AppointmentStateMachine;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
 using eDoktor.Services.Doctors;
@@ -44,7 +45,16 @@ namespace eDoktor.Services.Recommender
         public async Task<List<DoctorResponse>> GetRecommendedAsync(int patientId, int n = 10)
         {
             var cached = await _cache.GetAsync<List<DoctorResponse>>(Key(patientId));
-            if (cached != null && cached.Count > 0) return cached.Take(n).ToList();
+            if (cached != null && cached.Count > 0)
+            {
+                // A doctor may have been deleted after the list was cached. Such a card would lead to a doctor
+                // who can no longer be booked, so a cached list holding an inactive doctor is dropped and
+                // rebuilt from the active doctors below.
+                var ids = cached.Select(d => d.Id).ToList();
+                var activeCount = await _db.Doctors.CountAsync(d => ids.Contains(d.Id) && !d.IsDeleted);
+                if (activeCount == ids.Count) return cached.Take(n).ToList();
+                await InvalidateAsync(patientId);
+            }
 
             var patient = await _db.Users.FirstOrDefaultAsync(u => u.Id == patientId);
             var doctors = await _db.Doctors
@@ -125,8 +135,10 @@ namespace eDoktor.Services.Recommender
             var pieces = new List<string>();
             var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+            // Only exams that actually took place count as previous visits; a future booking or a cancelled
+            // one says nothing about the patient's care. Searches and ratings stay separate inputs (below / Rating).
             var visits = await _db.Appointments
-                .Where(a => a.PatientId == patientId)
+                .Where(a => a.PatientId == patientId && a.StateMachine == nameof(CompletedAppointmentState))
                 .Select(a => new
                 {
                     a.DoctorId,

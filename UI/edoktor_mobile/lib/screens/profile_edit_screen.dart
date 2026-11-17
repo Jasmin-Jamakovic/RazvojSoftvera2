@@ -8,6 +8,7 @@ import '../models/city.dart';
 import '../providers/auth_provider.dart';
 import '../providers/city_provider.dart';
 import '../utils/validators.dart';
+import '../widgets/location_search_dialog.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -27,6 +28,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   String? _gender;
   List<City> _cities = [];
   int? _cityId;
+  // Location for recommendations: saved coordinates, plus the label of a newly chosen place.
+  double? _lat, _lon;
+  String? _placeLabel;
+  bool _locationChanged = false;
 
   Uint8List? _newImageBytes; // freshly picked image (not yet saved)
   ImageProvider? _newImage;
@@ -46,6 +51,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _allergies = TextEditingController(text: u.allergies ?? '');
     _gender = (u.gender == 'M' || u.gender == 'F') ? u.gender : null;
     _cityId = u.cityId;
+    _lat = u.latitude;
+    _lon = u.longitude;
     _existingImage = _decodeImage(u.image);
     context.read<CityProvider>().list().then((c) { if (mounted) setState(() => _cities = c); });
   }
@@ -93,6 +100,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'bloodType': _bloodType ?? '',
         'allergies': _allergies.text.trim(),
       };
+      // Location is sent only when changed: new coordinates, or an explicit request to remove it.
+      if (_locationChanged) {
+        if (_lat == null || _lon == null) {
+          body['clearLocation'] = true;
+        } else {
+          body['latitude'] = _lat;
+          body['longitude'] = _lon;
+        }
+      }
       // Only send the image when the user picked a new one.
       if (_newImageBytes != null) body['image'] = base64Encode(_newImageBytes!);
 
@@ -105,6 +121,36 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _pickLocation() async {
+    final place = await showLocationSearchDialog(context, cityId: _cityId);
+    if (place == null || !mounted) return;
+    setState(() { _lat = place.latitude; _lon = place.longitude; _placeLabel = place.displayName; _locationChanged = true; });
+  }
+
+  Widget _locationCard() {
+    final hasLocation = _lat != null && _lon != null;
+    return InputDecorator(
+      decoration: const InputDecoration(labelText: 'Lokacija za preporuke (opciono)', border: OutlineInputBorder()),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          hasLocation
+              ? (_placeLabel ?? 'Lokacija je postavljena (${_lat!.toStringAsFixed(4)}, ${_lon!.toStringAsFixed(4)}).')
+              : 'Nije postavljena. Preporuke tada ne uzimaju u obzir udaljenost do klinike.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        const SizedBox(height: 4),
+        Wrap(spacing: 8, children: [
+          TextButton.icon(onPressed: _busy ? null : _pickLocation, icon: const Icon(Icons.place_outlined),
+              label: Text(hasLocation ? 'Promijeni' : 'Postavi lokaciju')),
+          if (hasLocation)
+            TextButton.icon(
+              onPressed: _busy ? null : () => setState(() { _lat = null; _lon = null; _placeLabel = null; _locationChanged = true; }),
+              icon: const Icon(Icons.location_off_outlined), label: const Text('Ukloni')),
+        ]),
+      ]),
+    );
   }
 
   @override
@@ -156,6 +202,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               items: _cities.map((ci) => DropdownMenuItem(value: ci.id, child: Text(ci.name))).toList(),
               validator: (v) => v == null ? 'Odaberite grad.' : null,
               onChanged: (v) => setState(() => _cityId = v)),
+            const SizedBox(height: 12),
+            _locationCard(),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _gender,

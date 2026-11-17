@@ -8,7 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace eDoktor.API.Controllers
 {
-    [ApiController, Route("api/geocoding"), Authorize(Roles = Roles.Admin)]
+    // Admins use it for clinic addresses; patients use it to set their own location for recommendations.
+    [ApiController, Route("api/geocoding"), Authorize(Roles = Roles.Admin + "," + Roles.Patient)]
     public class GeocodingController : ControllerBase
     {
         private readonly IGeocodingService _geocoding;

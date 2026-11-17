@@ -6,8 +6,14 @@ import '../services/auth_store.dart';
 class AuthProvider extends ChangeNotifier {
   User? get user => AuthStore.user;
 
-  Future<void> login(String username, String password) async {
-    final res = await ApiClient.post('/api/auth/login', {'username': username, 'password': password});
+  /// Signs in with an email address (anything containing "@") or a username; the server looks the
+  /// account up by whichever is sent.
+  Future<void> login(String emailOrUsername, String password) async {
+    final id = emailOrUsername.trim();
+    final res = await ApiClient.post('/api/auth/login', {
+      if (id.contains('@')) 'email': id else 'username': id,
+      'password': password,
+    });
     await AuthStore.save(res['token'], User.fromJson(res['user']));
     notifyListeners();
   }

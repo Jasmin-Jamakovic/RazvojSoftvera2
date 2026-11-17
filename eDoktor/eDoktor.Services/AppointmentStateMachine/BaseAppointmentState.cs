@@ -112,6 +112,13 @@ namespace eDoktor.Services.AppointmentStateMachine
                 a.RescheduledAt = DateTime.UtcNow;
                 a.RescheduledById = actingUserId;
                 a.RescheduleReason = reason;
+                // The reminder marks belong to the old time. When the time really changes they are cleared, so
+                // AppointmentReminderService sends the 24h and 1h reminders again for the new time.
+                if (newSlot.StartUtc != oldStart)
+                {
+                    a.Reminder24hSentAt = null;
+                    a.Reminder1hSentAt = null;
+                }
                 await SaveSlotChangesAsync();
                 await NotifyAsync(a.PatientId, "Termin pomjeren", text);
                 await NotifyAsync(a.Doctor.UserId, "Termin pomjeren",
@@ -167,11 +174,11 @@ namespace eDoktor.Services.AppointmentStateMachine
         }
 
         /// Tells the doctor their appointment was cancelled (unless the doctor did it themselves).
-        protected async Task NotifyDoctorOfCancellationAsync(Appointment a, string? reason, bool byStaff)
+        protected async Task NotifyDoctorOfCancellationAsync(Appointment a, string? reason, bool byStaff, string? title = null)
         {
             var actingUserId = await ActingUserIdAsync();
             if (actingUserId == a.Doctor.UserId) return;
-            var who = byStaff ? "Administrator je otkazao termin" : "Pacijent je otkazao termin";
+            var who = title ?? (byStaff ? "Administrator je otkazao termin" : "Pacijent je otkazao termin");
             await NotifyAsync(a.Doctor.UserId, who,
                 $"Termin pacijenta {a.Patient.FirstName} {a.Patient.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
                 + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}"));

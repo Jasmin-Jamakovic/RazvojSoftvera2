@@ -17,16 +17,48 @@ class MyAppointmentsTab extends StatefulWidget {
 }
 
 class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
-  late Future<List<Appointment>> _f;
+  static const _pageSize = 20;
   bool _showPast = false;
+
+  // Pages loaded so far for the selected tab. The server filters upcoming/past before paging,
+  // so loading further pages eventually reaches the patient's whole history.
+  final _items = <Appointment>[];
+  int _total = 0;
+  int _nextPage = 0;
+  bool _loading = false;
+  Object? _error;
+  int _generation = 0; // bumped on tab switch/refresh so a late response of the old list is ignored
+
+  bool get _hasMore => _items.length < _total;
 
   @override
   void initState() {
     super.initState();
-    _f = context.read<AppointmentProvider>().mine();
+    _loadMore();
   }
 
-  Future<void> _refresh() async { setState(() { _f = context.read<AppointmentProvider>().mine(); }); }
+  Future<void> _refresh() => _reload();
+
+  Future<void> _reload() {
+    _generation++;
+    setState(() { _items.clear(); _total = 0; _nextPage = 0; _error = null; _loading = false; });
+    return _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading) return;
+    final gen = _generation;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final res = await context.read<AppointmentProvider>().mine(upcoming: !_showPast, page: _nextPage, pageSize: _pageSize);
+      if (!mounted || gen != _generation) return;
+      setState(() { _items.addAll(res.items); _total = res.total; _nextPage++; });
+    } catch (e) {
+      if (mounted && gen == _generation) setState(() => _error = e);
+    } finally {
+      if (mounted && gen == _generation) setState(() => _loading = false);
+    }
+  }
 
   Future<void> _cancel(Appointment a) async {
     final ok = await confirmDialog(
@@ -90,9 +122,6 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
     _refresh();
   }
 
-  static bool _isUpcoming(Appointment a, DateTime now) =>
-      (a.status == 'Pending' || a.status == 'Confirmed') && a.endUtc.isAfter(now);
-
   @override
   Widget build(BuildContext context) {
     return SafeArea(
@@ -107,54 +136,78 @@ class _MyAppointmentsTabState extends State<MyAppointmentsTab> {
           child: _Segmented(
             labels: const ['Nadolazeći', 'Prošli'],
             selected: _showPast ? 1 : 0,
-            onSelect: (i) => setState(() => _showPast = i == 1),
+            onSelect: (i) {
+              if ((i == 1) == _showPast) return;
+              _showPast = i == 1;
+              _reload();
+            },
           ),
         ),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
-            child: FutureBuilder<List<Appointment>>(
-              future: _f,
-              builder: (c, s) {
-                if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-                if (s.hasError) return Center(child: Text('${s.error}'));
-                final now = DateTime.now();
-                final all = s.data ?? [];
-                final list = all.where((a) => _isUpcoming(a, now) != _showPast).toList()
-                  ..sort((a, b) => _showPast ? b.startUtc.compareTo(a.startUtc) : a.startUtc.compareTo(b.startUtc));
-                if (list.isEmpty) {
-                  return ListView(children: [
-                    const SizedBox(height: 80),
-                    EmptyState(
-                      icon: _showPast ? Icons.history : Icons.event_available_outlined,
-                      message: _showPast ? 'Nemate prošlih termina.' : 'Nemate nadolazećih termina.',
-                    ),
-                  ]);
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (c, i) => _AppointmentCard(
-                    appointment: list[i],
+            child: Builder(builder: (c) {
+              if (_items.isEmpty && _loading) return const Center(child: CircularProgressIndicator());
+              if (_items.isEmpty && _error != null) {
+                return ListView(children: [
+                  const SizedBox(height: 80),
+                  Center(child: Text('$_error', textAlign: TextAlign.center)),
+                  const SizedBox(height: 12),
+                  Center(child: TextButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh), label: const Text('Pokušaj ponovo'))),
+                ]);
+              }
+              if (_items.isEmpty) {
+                return ListView(children: [
+                  const SizedBox(height: 80),
+                  EmptyState(
+                    icon: _showPast ? Icons.history : Icons.event_available_outlined,
+                    message: _showPast ? 'Nemate prošlih termina.' : 'Nemate nadolazećih termina.',
+                  ),
+                ]);
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                // One extra row at the end for "load more" / loading / error.
+                itemCount: _items.length + (_hasMore || _loading || _error != null ? 1 : 0),
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (c, i) {
+                  if (i >= _items.length) return _footer();
+                  // Reaching the last loaded row fetches the next page automatically.
+                  if (i == _items.length - 1 && _hasMore && !_loading && _error == null) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _loadMore(); });
+                  }
+                  return _AppointmentCard(
+                    appointment: _items[i],
                     featured: !_showPast && i == 0,
                     onPay: _pay,
                     onJoin: _join,
                     onCancel: _cancel,
                     onReview: _review,
                     onChat: _openChat,
-                  ),
-                );
-              },
-            ),
+                  );
+                },
+              );
+            }),
           ),
         ),
       ]),
     );
   }
+
+  Widget _footer() {
+    if (_loading) return const Padding(padding: EdgeInsets.all(12), child: Center(child: CircularProgressIndicator()));
+    if (_error != null) {
+      return Center(child: TextButton.icon(onPressed: _loadMore, icon: const Icon(Icons.refresh),
+          label: const Text('Učitavanje nije uspjelo. Pokušaj ponovo')));
+    }
+    return Center(child: TextButton(onPressed: _loadMore, child: Text('Učitaj još (${_items.length} od $_total)')));
+  }
 }
 
 const _cancelLockedMessage = 'Otkazivanje nije moguće manje od 24h prije termina.';
+
+String _two(int v) => v.toString().padLeft(2, '0');
+String _dueLabel(DateTime d) => '${_two(d.day)}.${_two(d.month)}. u ${hhmm(d)}';
 
 class _AppointmentCard extends StatelessWidget {
   final Appointment appointment;
@@ -182,7 +235,11 @@ class _AppointmentCard extends StatelessWidget {
     final canCancel = a.status == 'Pending' || (a.status == 'Confirmed' && a.startUtc.difference(DateTime.now()).inHours >= 24);
     final cancelLocked = !canCancel && a.status == 'Confirmed' && a.endUtc.isAfter(DateTime.now());
     final canJoin = a.status == 'Confirmed' && a.isOnline && a.startUtc.difference(DateTime.now()).inMinutes <= 30 && a.endUtc.isAfter(DateTime.now());
-    final canPay = a.status == 'Pending' && !a.isPaid;
+    // Payment is offered only until the deadline; after it the server cancels the booking and frees the slot.
+    final now = DateTime.now();
+    final awaitsPayment = a.status == 'Pending' && !a.isPaid && a.paymentDue != null;
+    final paymentExpired = awaitsPayment && !a.paymentDue!.isAfter(now);
+    final canPay = awaitsPayment && !paymentExpired;
     final fg = featured ? Colors.white : AppColors.ink;
     final sub = featured ? Colors.white.withValues(alpha: 0.75) : AppColors.muted;
 
@@ -272,6 +329,21 @@ class _AppointmentCard extends StatelessWidget {
                     icon: Icons.check,
                     fg: featured ? Colors.white : AppColors.primary,
                     bg: featured ? Colors.white.withValues(alpha: 0.16) : AppColors.tint),
+            ]),
+          ),
+        if (awaitsPayment)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(children: [
+              Icon(paymentExpired ? Icons.timer_off_outlined : Icons.timer_outlined, size: 15,
+                  color: featured ? Colors.white : const Color(0xFFEF6C00)),
+              const SizedBox(width: 6),
+              Expanded(child: Text(
+                paymentExpired
+                    ? 'Rok za plaćanje je istekao. Termin će biti automatski otkazan.'
+                    : 'Platite do ${_dueLabel(a.paymentDue!)}, inače se termin automatski otkazuje.',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: featured ? Colors.white : const Color(0xFFEF6C00)),
+              )),
             ]),
           ),
         if (a.status == 'Cancelled' && (a.cancellationReason?.isNotEmpty ?? false))

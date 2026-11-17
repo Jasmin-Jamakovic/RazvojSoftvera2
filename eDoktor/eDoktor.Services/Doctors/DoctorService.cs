@@ -64,7 +64,7 @@ namespace eDoktor.Services.Doctors
             if (s.Page == 0) await RecordSearchAsync(s);
             int? total = s.IncludeTotalCount ? await q.CountAsync() : null;
             var list = await q
-                .OrderBy(d => d.User.LastName).ThenBy(d => d.User.FirstName)
+                .OrderBy(d => d.User.LastName).ThenBy(d => d.User.FirstName).ThenBy(d => d.Id)
                 .Skip(s.Page!.Value * s.PageSize!.Value).Take(s.PageSize!.Value)
                 .ToListAsync();
 
@@ -173,11 +173,12 @@ namespace eDoktor.Services.Doctors
                 Username = user.Username,
                 TemporaryPassword = tempPassword
             });
-            // The doctor only learns their password from this e-mail, so the admin must know when it wasn't sent.
-            if (!sent)
-                throw new UserException("Ljekar je kreiran, ali e-mail sa lozinkom nije poslan. Pokušajte reset lozinke.");
-
-            return (await GetByIdAsync(createdDoctorId))!;
+            // The doctor is already saved at this point, so a failed e-mail is not a failed create: the response
+            // says the doctor exists and flags the undelivered credentials, so the admin can point the doctor to
+            // the password reset instead of entering the doctor again (which would hit "email already registered").
+            var created = (await GetByIdAsync(createdDoctorId))!;
+            created.CredentialsEmailSent = sent;
+            return created;
         }
 
         public async Task<DoctorResponse> UpdateAsync(int id, DoctorUpsertRequest req)
@@ -212,9 +213,16 @@ namespace eDoktor.Services.Doctors
 
         public async Task<bool> SoftDeleteAsync(int id)
         {
-            var d = await _db.Doctors.FirstOrDefaultAsync(x => x.Id == id);
+            var d = await _db.Doctors.Include(x => x.User).FirstOrDefaultAsync(x => x.Id == id);
             if (d == null) return false;
             d.IsDeleted = true;
+
+            // Removing the doctor also closes their account: login skips deleted users, and bumping the
+            // token version makes every token they already hold fail validation (see Program.cs).
+            // Appointments, medical record entries and prescriptions are not touched, so history stays visible.
+            d.User.IsDeleted = true;
+            d.User.TokenVersion++;
+            d.User.LastModifiedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
             return true;
         }

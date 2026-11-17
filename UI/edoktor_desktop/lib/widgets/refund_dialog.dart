@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import '../utils/validators.dart';
 
+/// What to tell the admin after a refund request, based on the status PayPal reported.
+String refundResultMessage(String status) => status == 'RefundPending'
+    ? 'PayPal je prihvatio povrat, ali ga još obrađuje. Povrat će biti označen kao izvršen kada PayPal potvrdi da je novac vraćen.'
+    : 'Povrat sredstava je izvršen. PayPal je potvrdio da je novac vraćen pacijentu.';
+
 /// Asks the admin to confirm a PayPal refund and enter a reason.
 /// Returns the trimmed reason, or null if the dialog was dismissed.
 Future<String?> showRefundReasonDialog(BuildContext context, {required String message}) async {

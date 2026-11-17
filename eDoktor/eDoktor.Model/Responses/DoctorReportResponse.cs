@@ -10,6 +10,9 @@ namespace eDoktor.Model.Responses
         public DateTime To { get; set; }
         public string? SpecializationName { get; set; }
         public int TotalExams { get; set; }
+        // Gross = captured in the period, refunds = refunded in the period, TotalRevenue = net (gross - refunds).
+        public decimal TotalGross { get; set; }
+        public decimal TotalRefunds { get; set; }
         public decimal TotalRevenue { get; set; }
         public string? TopSpecialization { get; set; }
         public string? TopDoctor { get; set; }

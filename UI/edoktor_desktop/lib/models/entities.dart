@@ -41,7 +41,9 @@ class Doctor {
   final Clinic? clinic; final List<Specialization> specializations;
   final double averageRating; final int reviewCount; final bool hasPhoto;
   final String? email, phoneNumber;
-  Doctor({required this.id, required this.firstName, required this.lastName, this.bio, required this.yearsExperience, required this.consultationPrice, this.clinic, required this.specializations, required this.averageRating, required this.reviewCount, this.hasPhoto = false, this.email, this.phoneNumber});
+  /// Only in the response to creating a doctor: false when the email with the temporary password was not sent.
+  final bool? credentialsEmailSent;
+  Doctor({required this.id, required this.firstName, required this.lastName, this.bio, required this.yearsExperience, required this.consultationPrice, this.clinic, required this.specializations, required this.averageRating, required this.reviewCount, this.hasPhoto = false, this.email, this.phoneNumber, this.credentialsEmailSent});
   String get fullName => 'Dr. $firstName $lastName';
   factory Doctor.fromJson(Map<String, dynamic> j) => Doctor(
         id: j['id'], firstName: j['firstName'] ?? '', lastName: j['lastName'] ?? '',
@@ -50,7 +52,7 @@ class Doctor {
         specializations: (j['specializations'] as List? ?? []).map((e) => Specialization.fromJson(e)).toList(),
         averageRating: (j['averageRating'] ?? 0).toDouble(), reviewCount: j['reviewCount'] ?? 0,
         hasPhoto: j['hasPhoto'] ?? false,
-        email: j['email'], phoneNumber: j['phoneNumber']);
+        email: j['email'], phoneNumber: j['phoneNumber'], credentialsEmailSent: j['credentialsEmailSent']);
 }
 
 class Appointment {
@@ -63,12 +65,14 @@ class Appointment {
   final Map<String, dynamic>? payment;
   final String? cancellationReason;
   final bool isPaid;
+  /// Server-computed: an admin refund of the captured payment is allowed.
+  final bool canRefund;
   final String? videoRoomId;
   // Audit trail
   final DateTime createdAt;
   final DateTime? confirmedAt, completedAt, cancelledAt, rescheduledAt;
   final String? confirmedByName, completedByName, cancelledByName, rescheduledByName, rescheduleReason;
-  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason, this.isPaid = false, this.videoRoomId,
+  Appointment({required this.id, required this.patientId, this.patientName, required this.doctorId, this.doctorName, required this.startUtc, required this.type, required this.status, required this.price, this.payment, this.cancellationReason, this.isPaid = false, this.canRefund = false, this.videoRoomId,
       required this.createdAt, this.confirmedAt, this.completedAt, this.cancelledAt, this.rescheduledAt,
       this.confirmedByName, this.completedByName, this.cancelledByName, this.rescheduledByName, this.rescheduleReason});
   bool get isOnline => type == 1;
@@ -81,6 +85,7 @@ class Appointment {
         payment: j['payment'] as Map<String, dynamic>?,
         cancellationReason: j['cancellationReason'],
         isPaid: j['isPaid'] ?? false,
+        canRefund: j['canRefund'] ?? false,
         videoRoomId: j['videoRoomId'],
         createdAt: DateTime.parse(j['createdAt']).toLocal(),
         confirmedAt: _localOrNull(j['confirmedAt']),
@@ -114,15 +119,18 @@ class Payment {
   final DateTime createdAt;
   final DateTime? capturedAt, refundedAt, appointmentStart;
   final String? patientName, doctorName, appointmentStatus;
-  Payment({required this.id, required this.appointmentId, this.captureId, required this.amount, required this.currency, required this.status, required this.createdAt, this.capturedAt, this.refundedAt, this.appointmentStart, this.patientName, this.doctorName, this.appointmentStatus});
-  bool get canRefund => status == 'Captured' && captureId != null && appointmentStatus == 'Cancelled';
+  /// Computed by the server with the same rule the refund endpoint enforces (cancelled appointment,
+  /// cancelled by the practice or at least 24h before the start, payment captured).
+  final bool canRefund;
+  Payment({required this.id, required this.appointmentId, this.captureId, required this.amount, required this.currency, required this.status, required this.createdAt, this.capturedAt, this.refundedAt, this.appointmentStart, this.patientName, this.doctorName, this.appointmentStatus, this.canRefund = false});
   static DateTime? _d(dynamic v) => v == null ? null : DateTime.parse(v).toLocal();
   factory Payment.fromJson(Map<String, dynamic> j) => Payment(
         id: j['id'], appointmentId: j['appointmentId'], captureId: j['captureId'],
         amount: (j['amount'] ?? 0).toDouble(), currency: j['currency'] ?? 'EUR', status: j['status'] ?? '',
         createdAt: DateTime.parse(j['createdAt']).toLocal(),
         capturedAt: _d(j['capturedAt']), refundedAt: _d(j['refundedAt']), appointmentStart: _d(j['appointmentStartUtc']),
-        patientName: j['patientName'], doctorName: j['doctorName'], appointmentStatus: j['appointmentStatus']);
+        patientName: j['patientName'], doctorName: j['doctorName'], appointmentStatus: j['appointmentStatus'],
+        canRefund: j['canRefund'] ?? false);
 }
 
 class PaymentSummary {

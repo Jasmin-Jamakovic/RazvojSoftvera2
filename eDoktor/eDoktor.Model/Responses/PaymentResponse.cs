@@ -20,5 +20,7 @@ namespace eDoktor.Model.Responses
         public string? DoctorName { get; set; }
         public DateTime? AppointmentStartUtc { get; set; }
         public string? AppointmentStatus { get; set; }
+        // Whether an admin refund is allowed right now (same rule the refund endpoint enforces).
+        public bool CanRefund { get; set; }
     }
 }

@@ -37,13 +37,9 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Future<Appointment?> _loadNext() async {
-    final now = DateTime.now();
-    final list = await context.read<AppointmentProvider>().mine();
-    final upcoming = list
-        .where((a) => (a.status == 'Pending' || a.status == 'Confirmed') && a.endUtc.isAfter(now))
-        .toList()
-      ..sort((a, b) => a.startUtc.compareTo(b.startUtc));
-    return upcoming.isEmpty ? null : upcoming.first;
+    // The server sorts upcoming appointments nearest first, so the first one is the next appointment.
+    final res = await context.read<AppointmentProvider>().mine(upcoming: true, pageSize: 1);
+    return res.items.isEmpty ? null : res.items.first;
   }
 
   String _greeting() {

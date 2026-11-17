@@ -52,7 +52,7 @@ namespace eDoktor.Services.AppointmentStateMachine
 
             var payment = a.CapturedPayment();
             var refundEligible = payment != null && !string.IsNullOrEmpty(payment.CaptureId);
-            var refunded = false;
+            PayPalRefundResult? refund = null;
 
             // Refund first, outside the DB transaction: an HTTP call to PayPal must not hold the transaction open,
             // and if the refund fails nothing has changed yet, so the appointment can't end up cancelled-but-unrefunded.
@@ -62,15 +62,19 @@ namespace eDoktor.Services.AppointmentStateMachine
                 try
                 {
                     var paypal = _serviceProvider.GetRequiredService<IPayPalService>();
-                    refunded = await paypal.RefundAsync(payment!.CaptureId!, payment.Amount, "Otkazivanje termina");
+                    refund = await paypal.RefundAsync(payment!.CaptureId!, "Otkazivanje termina");
                 }
                 catch (Exception ex)
                 {
                     logger.LogWarning(ex, "Refund failed for appointment {AppointmentId} (capture {CaptureId}).", a.Id, payment!.CaptureId);
                 }
-                if (!refunded)
+                // PayPal must have accepted the refund (COMPLETED, or PENDING = accepted but still in progress).
+                if (refund == null || !(refund.IsCompleted || refund.IsPending))
                     throw new UserException("Povrat novca nije uspio, pa termin nije otkazan. Pokušajte ponovo kasnije.");
             }
+            // The money is only reported as returned once PayPal says the refund is COMPLETED.
+            var refunded = refund?.IsCompleted == true;
+            var refundPending = refund?.IsPending == true;
 
             var actingUserId = await ActingUserIdAsync();
             await InTransactionAsync(async () =>
@@ -85,11 +89,16 @@ namespace eDoktor.Services.AppointmentStateMachine
                     payment!.Status = PaymentStatus.Refunded;
                     payment.RefundedAt = DateTime.UtcNow;
                 }
+                else if (refundPending)
+                {
+                    payment!.Status = PaymentStatus.RefundPending;
+                }
                 await _context.SaveChangesAsync();
                 await NotifyAsync(a.PatientId, "Termin otkazan",
                     $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
                     + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}")
-                    + (refunded ? " Novac je vraćen na vaš PayPal račun." : ""));
+                    + (refunded ? " Novac je vraćen na vaš PayPal račun."
+                        : refundPending ? " Povrat novca je pokrenut; obavijestit ćemo vas kada ga PayPal završi." : ""));
                 await NotifyDoctorOfCancellationAsync(a, reason, byStaff);
             });
 

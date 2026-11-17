@@ -22,6 +22,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
       if (s.hasError) return Center(child: Text('Greška: ${s.error}'));
       final d = s.data!;
+      final month = DateFormat('MM/yyyy').format(d.monthStart);
+      final money = NumberFormat.currency(symbol: '€', decimalDigits: 0);
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('Dashboard', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
@@ -30,12 +32,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _stat('Pacijenata', '${d.totalPatients}', Icons.people),
           _stat('Termini ukupno', '${d.totalAppointments}', Icons.event_available),
           _stat('Termini danas', '${d.appointmentsToday}', Icons.today),
-          _stat('Prihod (mjesec)', NumberFormat.currency(symbol: '€', decimalDigits: 0).format(d.revenueThisMonth), Icons.euro),
+          // Gross by capture date, refunds by refund date, both for the same month; net is their difference.
+          _stat('Bruto naplata ($month)', money.format(d.grossThisMonth), Icons.payments),
+          _stat('Povrati ($month)', money.format(d.refundsThisMonth), Icons.undo),
+          _stat('Neto prihod ($month)', money.format(d.revenueThisMonth), Icons.euro),
           _stat('Top specijalizacija', d.topSpecialization ?? '-', Icons.star),
           _stat('Najbolji ljekar', '${d.topDoctor ?? "-"} (${d.topDoctorRating.toStringAsFixed(1)})', Icons.emoji_events),
         ]),
         const SizedBox(height: 24),
-        const Text('Prihod po ljekaru', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text('Neto prihod po ljekaru ($month)', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 12),
         Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(24), child: d.rows.isEmpty ? const Center(child: Text('Nema podataka.')) : BarChart(BarChartData(
           alignment: BarChartAlignment.spaceAround,

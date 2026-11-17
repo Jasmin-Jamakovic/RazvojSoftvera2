@@ -161,7 +161,9 @@ class _DoctorReportTabState extends State<_DoctorReportTab> with AutomaticKeepAl
           const SizedBox(height: 12),
           Wrap(spacing: 16, runSpacing: 16, children: [
             _stat('Ukupno pregleda', '${r.totalExams}', Icons.event_available),
-            _stat('Prihod', _money.format(r.totalRevenue), Icons.euro),
+            _stat('Bruto naplata (po datumu naplate)', _money.format(r.totalGross), Icons.payments),
+            _stat('Povrati (po datumu povrata)', _money.format(r.totalRefunds), Icons.undo),
+            _stat('Neto prihod (bruto − povrati)', _money.format(r.totalRevenue), Icons.euro),
             _stat('Najtraženija specijalizacija', r.topSpecialization ?? '-', Icons.star),
             _stat('Najbolje ocijenjen ljekar', r.topDoctor == null ? '-' : '${r.topDoctor} (${r.topDoctorRating.toStringAsFixed(1)})', Icons.emoji_events),
           ]),
@@ -179,13 +181,17 @@ class _DoctorReportTabState extends State<_DoctorReportTab> with AutomaticKeepAl
             DataColumn(label: Text('Specijalizacija')),
             DataColumn(label: Text('Broj pregleda'), numeric: true),
             DataColumn(label: Text('Prosječna ocjena'), numeric: true),
-            DataColumn(label: Text('Prihod'), numeric: true),
+            DataColumn(label: Text('Bruto'), numeric: true),
+            DataColumn(label: Text('Povrati'), numeric: true),
+            DataColumn(label: Text('Neto'), numeric: true),
           ], rows: [
             ...r.rows.map((x) => DataRow(cells: [
               DataCell(Text('dr. ${x.doctorName}')),
               DataCell(Text(x.specialization ?? '-')),
               DataCell(Text('${x.appointmentCount}')),
               DataCell(Text(x.averageRating == 0 ? 'Bez ocjena' : x.averageRating.toStringAsFixed(1))),
+              DataCell(Text(_money.format(x.grossRevenue))),
+              DataCell(Text(_money.format(x.refunds))),
               DataCell(Text(_money.format(x.revenue))),
             ])),
             DataRow(color: WidgetStateProperty.all(const Color(0xFFF2F5F9)), cells: [
@@ -193,6 +199,8 @@ class _DoctorReportTabState extends State<_DoctorReportTab> with AutomaticKeepAl
               const DataCell(Text('')),
               DataCell(Text('${r.totalExams}', style: const TextStyle(fontWeight: FontWeight.bold))),
               const DataCell(Text('')),
+              DataCell(Text(_money.format(r.totalGross), style: const TextStyle(fontWeight: FontWeight.bold))),
+              DataCell(Text(_money.format(r.totalRefunds), style: const TextStyle(fontWeight: FontWeight.bold))),
               DataCell(Text(_money.format(r.totalRevenue), style: const TextStyle(fontWeight: FontWeight.bold))),
             ]),
           ]))),

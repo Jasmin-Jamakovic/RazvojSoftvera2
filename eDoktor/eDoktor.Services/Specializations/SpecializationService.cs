@@ -19,7 +19,8 @@ namespace eDoktor.Services.Specializations
             query = base.ApplyFilter(query, s);
             if (!string.IsNullOrWhiteSpace(s.Name))
                 query = query.Where(x => x.Name.Contains(s.Name));
-            return query;
+            // Stable order for paging (the desktop reads every page).
+            return query.OrderBy(x => x.Name).ThenBy(x => x.Id);
         }
     }
 }

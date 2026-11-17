@@ -115,6 +115,7 @@ class _PaymentHistoryScreenState extends State<PaymentHistoryScreen> {
     final (label, fg, bg, icon) = switch (p.status) {
       'Captured' => ('Plaćeno', AppColors.primary, AppColors.tint, Icons.check_circle_outline),
       'Refunded' => ('Vraćeno', const Color(0xFF1565C0), const Color(0xFFE3F0FD), Icons.undo),
+      'RefundPending' => ('Povrat u obradi', const Color(0xFF6A1B9A), const Color(0xFFF3E5F5), Icons.hourglass_top),
       'Cancelled' => ('Napušteno', AppColors.muted, const Color(0xFFECEFF3), Icons.close),
       _ => ('Na čekanju', const Color(0xFFEF6C00), const Color(0xFFFFF2E0), Icons.hourglass_empty),
     };

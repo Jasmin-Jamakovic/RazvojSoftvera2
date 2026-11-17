@@ -3,6 +3,7 @@ using System.Linq;
 using eDoktor.Model;
 using eDoktor.Model.Responses;
 using eDoktor.Services.Database.Entities;
+using eDoktor.Services.Payments;
 using MapsterMapper;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,6 +51,8 @@ namespace eDoktor.Services.Appointments
             RescheduleReason = a.RescheduleReason,
             Payment = a.CurrentPayment() is { } p ? mapper.Map<PaymentResponse>(p) : null,
             VideoRoomId = a.VideoCallSession?.RoomId,
+            PaymentDueUtc = a.TimeSlot != null && PaymentRules.AwaitsPayment(a) ? PaymentRules.PaymentDeadline(a.CreatedAt, a.TimeSlot.StartUtc) : null,
+            CanRefund = a.TimeSlot != null && a.CapturedPayment() is { CaptureId: not null } && PaymentRules.RefundAllowed(a),
             ReviewRating = a.Review is { IsDeleted: false } ? a.Review.Rating : null
         };
 

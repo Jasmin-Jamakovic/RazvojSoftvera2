@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using eDoktor.Model;
@@ -37,6 +38,13 @@ namespace eDoktor.Services.Cities
             return entity == null ? null : MapToResponse(entity);
         }
 
+        public async Task<List<CityLookupResponse>> GetActiveLookupAsync() =>
+            await _context.Cities
+                .Where(c => !c.IsDeleted)
+                .OrderBy(c => c.Name)
+                .Select(c => new CityLookupResponse { Id = c.Id, Name = c.Name })
+                .ToListAsync();
+
         private async Task EnsureCountryExistsAsync(int countryId)
         {
             if (!await _context.Countries.AnyAsync(c => c.Id == countryId && !c.IsDeleted))
@@ -50,7 +58,7 @@ namespace eDoktor.Services.Cities
                 query = query.Where(x => x.Name.Contains(s.Name));
             if (s.CountryId.HasValue)
                 query = query.Where(x => x.CountryId == s.CountryId.Value);
-            return query.OrderBy(x => x.Name);
+            return query.OrderBy(x => x.Name).ThenBy(x => x.Id);
         }
     }
 }

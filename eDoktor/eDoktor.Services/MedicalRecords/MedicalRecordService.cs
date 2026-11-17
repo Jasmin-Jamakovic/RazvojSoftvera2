@@ -34,7 +34,11 @@ namespace eDoktor.Services.MedicalRecords
             {
                 Roles.Admin => true,
                 Roles.Patient => uid == patientId,
-                Roles.Doctor => await _db.Appointments.AnyAsync(a => a.PatientId == patientId && a.Doctor.UserId == uid),
+                // A doctor may open the record only through a real consultation with this patient: a confirmed
+                // (valid) or completed appointment. A booking still waiting for confirmation/payment, or a
+                // cancelled one, does not count. Every list and single-record read goes through this check.
+                Roles.Doctor => await _db.Appointments.AnyAsync(a => a.PatientId == patientId && a.Doctor.UserId == uid
+                    && (a.StateMachine == nameof(ConfirmedAppointmentState) || a.StateMachine == nameof(CompletedAppointmentState))),
                 _ => false
             };
             if (!allowed) throw new ForbiddenException("Nemate pristup kartonu ovog pacijenta.");
@@ -122,11 +126,10 @@ namespace eDoktor.Services.MedicalRecords
 
         public async Task<MedicalRecordEntryResponse> AddEntryAsync(MedicalRecordEntryUpsertRequest req, int doctorUserId)
         {
-            var appt = await _db.Appointments.Include(a => a.Doctor).FirstOrDefaultAsync(a => a.Id == req.AppointmentId)
+            var appt = await _db.Appointments.Include(a => a.Doctor).Include(a => a.TimeSlot).FirstOrDefaultAsync(a => a.Id == req.AppointmentId)
                 ?? throw new NotFoundException("Termin nije pronađen.");
             if (appt.Doctor.UserId != doctorUserId) throw new ForbiddenException("Samo ljekar ovog pregleda može upisati nalaz u karton.");
-            if (appt.StateMachine != nameof(ConfirmedAppointmentState) && appt.StateMachine != nameof(CompletedAppointmentState))
-                throw new UserException("Nalaz se može upisati samo za potvrđen ili završen termin.");
+            EnsureValidExam(appt, "Nalaz");
             if (await _db.MedicalRecordEntries.AnyAsync(e => e.AppointmentId == appt.Id))
                 throw new UserException("Za ovaj termin je već upisan nalaz. Uredite postojeći.");
 
@@ -179,10 +182,13 @@ namespace eDoktor.Services.MedicalRecords
             var entry = await _db.MedicalRecordEntries
                 .Include(e => e.Appointment).ThenInclude(a => a.Doctor).ThenInclude(d => d.User)
                 .Include(e => e.Appointment).ThenInclude(a => a.Patient)
+                .Include(e => e.Appointment).ThenInclude(a => a.TimeSlot)
                 .FirstOrDefaultAsync(e => e.Id == req.MedicalRecordEntryId)
                 ?? throw new NotFoundException("Unos u kartonu nije pronađen.");
 
             if (entry.Appointment.Doctor.UserId != doctorUserId) throw new ForbiddenException("Samo ljekar ovog pregleda može izdati recept.");
+            // The appointment's state is read again now: it may have been cancelled after the finding was written.
+            EnsureValidExam(entry.Appointment, "Recept");
 
             if (await _db.Prescriptions.AnyAsync(p => p.MedicalRecordEntryId == entry.Id))
                 throw new UserException("Za ovaj zapis u kartonu recept je već izdat.");
@@ -215,6 +221,7 @@ namespace eDoktor.Services.MedicalRecords
         public async Task<PrescriptionResponse> UpdatePrescriptionAsync(int id, PrescriptionUpsertRequest req, int doctorUserId)
         {
             var p = await LoadOwnPrescriptionAsync(id, doctorUserId, "Samo ljekar koji je izdao recept ga može izmijeniti.");
+            EnsureValidExam(p.MedicalRecordEntry.Appointment, "Recept");
             // The medication rows are replaced as a whole (master-details save).
             _db.PrescriptionItems.RemoveRange(p.Items);
             p.Items = ToItems(req);
@@ -229,10 +236,23 @@ namespace eDoktor.Services.MedicalRecords
             await _db.SaveChangesAsync();
         }
 
+        /// A finding or prescription belongs to an exam that really happens: the appointment is confirmed or
+        /// completed (never pending or cancelled) and has already started.
+        private static void EnsureValidExam(Appointment appt, string what)
+        {
+            if (appt.StateMachine == nameof(CancelledAppointmentState))
+                throw new UserException($"{what} se ne može izdati za otkazan pregled.");
+            if (appt.StateMachine != nameof(ConfirmedAppointmentState) && appt.StateMachine != nameof(CompletedAppointmentState))
+                throw new UserException($"{what} se može upisati samo za potvrđen ili završen pregled.");
+            if (appt.TimeSlot.StartUtc > System.DateTime.UtcNow)
+                throw new UserException($"{what} se može upisati tek kada pregled počne.");
+        }
+
         private async Task<Prescription> LoadOwnPrescriptionAsync(int id, int doctorUserId, string forbidden)
         {
             var p = await _db.Prescriptions.Include(x => x.Items)
                 .Include(x => x.MedicalRecordEntry).ThenInclude(e => e.Appointment).ThenInclude(a => a.Doctor)
+                .Include(x => x.MedicalRecordEntry).ThenInclude(e => e.Appointment).ThenInclude(a => a.TimeSlot)
                 .FirstOrDefaultAsync(x => x.Id == id) ?? throw new NotFoundException("Recept nije pronađen.");
             if (p.MedicalRecordEntry.Appointment.Doctor.UserId != doctorUserId) throw new ForbiddenException(forbidden);
             return p;
@@ -325,6 +345,7 @@ namespace eDoktor.Services.MedicalRecords
             PatientId = e.MedicalRecord.PatientId,
             AppointmentId = e.AppointmentId,
             AppointmentDate = e.Appointment.TimeSlot.StartUtc,
+            AppointmentStatus = e.Appointment.StateMachine.Replace("AppointmentState", string.Empty),
             DoctorId = e.Appointment.DoctorId,
             DoctorName = $"{e.Appointment.Doctor.User.FirstName} {e.Appointment.Doctor.User.LastName}",
             Specialization = e.Appointment.Doctor.DoctorSpecializations.FirstOrDefault()?.Specialization?.Name,

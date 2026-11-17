@@ -40,7 +40,8 @@ namespace eDoktor.Services.Clinics
             query = base.ApplyFilter(query, s).Include(x => x.City);
             if (!string.IsNullOrWhiteSpace(s.Name)) query = query.Where(x => x.Name.Contains(s.Name));
             if (s.CityId.HasValue) query = query.Where(x => x.CityId == s.CityId.Value);
-            return query;
+            // Stable order for paging (the desktop reads every page).
+            return query.OrderBy(x => x.Name).ThenBy(x => x.Id);
         }
     }
 }

@@ -9,6 +9,7 @@ using eDoktor.Services.Auth;
 using eDoktor.Services.Database;
 using eDoktor.Services.Database.Entities;
 using eDoktor.Services.RabbitMQ;
+using eDoktor.Services.Recommender;
 using Microsoft.EntityFrameworkCore;
 
 namespace eDoktor.Services.Users
@@ -20,9 +21,12 @@ namespace eDoktor.Services.Users
         private readonly IJwtTokenService _jwt;
         private readonly IRabbitMQService _rabbit;
         private readonly ICurrentUserService _current;
+        private readonly IRecommenderService _recommender;
 
-        public UserService(eDoktorDbContext db, IPasswordHasher hasher, IJwtTokenService jwt, IRabbitMQService rabbit, ICurrentUserService current)
+        public UserService(eDoktorDbContext db, IPasswordHasher hasher, IJwtTokenService jwt, IRabbitMQService rabbit, ICurrentUserService current,
+            IRecommenderService recommender)
         {
+            _recommender = recommender;
             _db = db;
             _hasher = hasher;
             _jwt = jwt;
@@ -56,6 +60,8 @@ namespace eDoktor.Services.Users
 
             search.Normalize();
             int? total = search.IncludeTotalCount ? await q.CountAsync() : null;
+            // A fixed order (name, then id as a tie-breaker) before paging, so no user is skipped or repeated across pages.
+            q = q.OrderBy(u => u.LastName).ThenBy(u => u.FirstName).ThenBy(u => u.Id);
             q = q.Skip(search.Page!.Value * search.PageSize!.Value).Take(search.PageSize!.Value);
 
             var list = await q.ToListAsync();
@@ -77,8 +83,8 @@ namespace eDoktor.Services.Users
             await EnsureSelfOrAdminAsync(id, "Možete uređivati samo vlastiti profil.");
             var u = await _db.Users.Include(x => x.Role).Include(x => x.City).FirstOrDefaultAsync(x => x.Id == id)
                 ?? throw new NotFoundException("Korisnik nije pronađen.");
-            if (req.CityId.HasValue && !await _db.Cities.AnyAsync(c => c.Id == req.CityId.Value))
-                throw new UserException("Odabrani grad ne postoji.");
+            if (req.CityId.HasValue && !await _db.Cities.AnyAsync(c => c.Id == req.CityId.Value && !c.IsDeleted))
+                throw new UserException("Odabrani grad ne postoji ili više nije dostupan.");
             if (req.FirstName != null) u.FirstName = req.FirstName.Trim();
             if (req.LastName != null) u.LastName = req.LastName.Trim();
             if (req.Email != null)
@@ -95,8 +101,21 @@ namespace eDoktor.Services.Users
             if (req.BloodType != null) u.BloodType = string.IsNullOrWhiteSpace(req.BloodType) ? null : req.BloodType.Trim();
             if (req.Allergies != null) u.Allergies = string.IsNullOrWhiteSpace(req.Allergies) ? null : req.Allergies.Trim();
             if (req.CityId.HasValue) u.CityId = req.CityId;
-            if (req.Latitude.HasValue) u.Latitude = req.Latitude;
-            if (req.Longitude.HasValue) u.Longitude = req.Longitude;
+            // Location is used by the recommender's distance factor, so latitude and longitude come as a pair.
+            var oldLocation = (u.Latitude, u.Longitude);
+            if (req.ClearLocation == true)
+            {
+                u.Latitude = null;
+                u.Longitude = null;
+            }
+            else if (req.Latitude.HasValue || req.Longitude.HasValue)
+            {
+                if (!req.Latitude.HasValue || !req.Longitude.HasValue)
+                    throw new UserException("Lokacija mora imati i geografsku širinu i dužinu.");
+                u.Latitude = req.Latitude;
+                u.Longitude = req.Longitude;
+            }
+            var locationChanged = oldLocation != (u.Latitude, u.Longitude);
             if (req.ReceiveNotifications.HasValue) u.ReceiveNotifications = req.ReceiveNotifications.Value;
             if (req.Image != null)
             {
@@ -106,6 +125,8 @@ namespace eDoktor.Services.Users
             }
             u.LastModifiedAt = System.DateTime.UtcNow;
             await _db.SaveChangesAsync();
+            // Distances to clinics changed, so the cached recommendations are recomputed on the next request.
+            if (locationChanged) await _recommender.InvalidateAsync(u.Id);
             // refresh the City nav so the response carries the correct CityName
             u.City = u.CityId.HasValue ? await _db.Cities.FirstOrDefaultAsync(c => c.Id == u.CityId.Value) : null;
             return Map(u, includeImage: true);
@@ -122,10 +143,21 @@ namespace eDoktor.Services.Users
 
         public async Task<LoginResponse> LoginAsync(LoginRequest req)
         {
-            var u = await _db.Users.Include(x => x.Role).FirstOrDefaultAsync(x => x.Username == req.Username && !x.IsDeleted)
-                ?? throw new UserException("Pogrešno korisničko ime ili lozinka.");
-            if (!_hasher.Verify(req.Password, u.PasswordHash))
-                throw new UserException("Pogrešno korisničko ime ili lozinka.");
+            // The account is looked up by email when one is given, otherwise by username.
+            var email = req.Email?.Trim();
+            var username = req.Username?.Trim();
+            if (string.IsNullOrEmpty(email) && string.IsNullOrEmpty(username))
+                throw new UserException("Unesite email adresu ili korisničko ime.");
+
+            var users = _db.Users.Include(x => x.Role).Where(x => !x.IsDeleted);
+            var u = await (!string.IsNullOrEmpty(email)
+                    ? users.FirstOrDefaultAsync(x => x.Email == email)
+                    : users.FirstOrDefaultAsync(x => x.Username == username));
+
+            // Same message for "no such account" and "wrong password", so the response does not reveal which accounts exist.
+            const string invalid = "Pogrešni pristupni podaci ili lozinka.";
+            if (u == null || !_hasher.Verify(req.Password, u.PasswordHash))
+                throw new UserException(invalid);
 
             return new LoginResponse { Token = _jwt.GenerateToken(u), User = Map(u, includeImage: true) };
         }
@@ -142,6 +174,12 @@ namespace eDoktor.Services.Users
                 throw new UserException("Korisničko ime je zauzeto. Odaberite drugo.");
             if (await _db.Users.AnyAsync(u => u.Email == req.Email))
                 throw new UserException("Ova email adresa je već registrovana.");
+
+            // The city comes from a client-side picker, so it is checked again here: it must exist and be active.
+            if (!req.CityId.HasValue)
+                throw new UserException("Odaberite grad.");
+            if (!await _db.Cities.AnyAsync(c => c.Id == req.CityId.Value && !c.IsDeleted))
+                throw new UserException("Odabrani grad ne postoji ili više nije dostupan. Odaberite drugi grad.");
 
             var patientRole = await _db.Roles.FirstAsync(r => r.Name == Roles.Patient);
 

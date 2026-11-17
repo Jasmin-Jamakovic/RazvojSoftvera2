@@ -7,7 +7,7 @@ using MimeKit;
 namespace eDoktor.Worker
 {
     // SMTP settings come from .env and are read once. With no sender address/password configured
-    // (development), emails are written to the log instead of being sent.
+    // (development), emails are not sent; only the message type is logged (never the body).
     public class MailSender
     {
         private readonly ILogger _logger;
@@ -43,7 +43,9 @@ namespace eDoktor.Worker
         {
             if (!IsConfigured)
             {
-                _logger.LogInformation("[dev-email] To={To} Subject={Subject}\n{Body}", email.To, email.Subject, email.Body);
+                // Without SMTP the message is not delivered; only the technical outcome and the message type are
+                // logged. The body is never written: it can hold a doctor's temporary password or a reset code.
+                _logger.LogWarning("SMTP is not configured: {Kind} email was not sent (body withheld from the log).", email.Kind);
                 return;
             }
 
@@ -71,7 +73,7 @@ namespace eDoktor.Worker
             await client.AuthenticateAsync(_fromAddress, _password);
             await client.SendAsync(msg);
             await client.DisconnectAsync(true);
-            _logger.LogInformation("Email sent: {To} / {Subject}", email.To, email.Subject);
+            _logger.LogInformation("Email sent: {Kind}.", email.Kind);
         }
 
         private static string Template(string greeting, string lead, string body) => $@"

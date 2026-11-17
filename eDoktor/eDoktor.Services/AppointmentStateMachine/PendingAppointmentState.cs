@@ -38,7 +38,22 @@ namespace eDoktor.Services.AppointmentStateMachine
             return await MapAfterChangeAsync(a);
         }
 
-        public override async Task<AppointmentResponse> CancelAsync(int id, string? reason)
+        public override Task<AppointmentResponse> CancelAsync(int id, string? reason) => CancelCoreAsync(id, reason, expired: false);
+
+        /// Closes a booking that was not paid by its payment deadline (called by PaymentMaintenanceService).
+        /// It goes through the same cancellation as a manual cancel, so the slot is released and the open
+        /// PayPal order is retired; only the reason and the doctor's notification title say it was automatic.
+        public async Task<AppointmentResponse> ExpireUnpaidAsync(int id)
+        {
+            var a = await LoadAsync(id);
+            if (!Payments.PaymentRules.AwaitsPayment(a))
+                throw new UserException("Termin ne čeka plaćanje.");
+            if (DateTime.UtcNow < Payments.PaymentRules.PaymentDeadline(a.CreatedAt, a.TimeSlot.StartUtc))
+                throw new UserException("Rok za plaćanje termina još nije istekao.");
+            return await CancelCoreAsync(id, "Termin nije plaćen do isteka roka za plaćanje.", expired: true);
+        }
+
+        private async Task<AppointmentResponse> CancelCoreAsync(int id, string? reason, bool expired)
         {
             var a = await LoadAsync(id);
             var actingUserId = await ActingUserIdAsync();
@@ -57,7 +72,8 @@ namespace eDoktor.Services.AppointmentStateMachine
                 await NotifyAsync(a.PatientId, "Termin otkazan",
                     $"Vaš termin kod dr. {a.Doctor?.User?.FirstName} {a.Doctor?.User?.LastName} ({DisplayTime.Format(a.TimeSlot.StartUtc)}) je otkazan."
                     + (string.IsNullOrWhiteSpace(reason) ? "" : $" Razlog: {reason}"));
-                await NotifyDoctorOfCancellationAsync(a, reason, byStaff);
+                await NotifyDoctorOfCancellationAsync(a, reason, byStaff,
+                    expired ? "Neplaćeni termin je automatski otkazan" : null);
             });
 
             var rabbit = _serviceProvider.GetRequiredService<IRabbitMQService>();

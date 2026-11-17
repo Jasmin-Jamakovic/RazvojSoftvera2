@@ -285,8 +285,10 @@ class RecordEntriesTab extends StatelessWidget {
     try {
       await record.loadMyAppointments(appts);
       final withEntry = await records.entryAppointmentIds(record.patientId);
+      // Same rule as the server: a visit is written for a confirmed or completed exam that has already started.
+      final now = DateTime.now();
       eligible = record.myAppointments
-          .where((a) => (a.status == 'Confirmed' || a.status == 'Completed') && !withEntry.contains(a.id))
+          .where((a) => (a.status == 'Confirmed' || a.status == 'Completed') && !a.startUtc.isAfter(now) && !withEntry.contains(a.id))
           .toList();
     } catch (e) {
       if (context.mounted) _snack(context, '$e');
@@ -294,7 +296,7 @@ class RecordEntriesTab extends StatelessWidget {
     }
     if (!context.mounted) return;
     if (eligible.isEmpty) {
-      _snack(context, 'Nema potvrđenih ili završenih termina sa ovim pacijentom bez upisane posjete.');
+      _snack(context, 'Nema započetih potvrđenih ili završenih pregleda sa ovim pacijentom bez upisane posjete.');
       return;
     }
     if (!await showMedicalEntryForm(context, appointments: eligible) || !context.mounted) return;
@@ -357,12 +359,14 @@ class RecordEntriesTab extends StatelessWidget {
               const SizedBox(width: 8),
               const Text('E-recept', style: TextStyle(fontWeight: FontWeight.w600)),
               const Spacer(),
-              if (mine && e.prescription == null)
+              if (mine && e.prescription == null && !e.allowsPrescription)
+                const Text('Pregled je otkazan – recept nije moguć.', style: TextStyle(color: Colors.black54)),
+              if (mine && e.prescription == null && e.allowsPrescription)
                 TextButton.icon(
                   onPressed: () => _editPrescription(c, record, entryId: e.id, visitDate: e.appointmentDate, diagnosis: e.diagnosis),
                   icon: const Icon(Icons.add), label: const Text('Recept')),
               if (mine && e.prescription != null) ...[
-                TextButton.icon(
+                if (e.allowsPrescription) TextButton.icon(
                   onPressed: () => _editPrescription(c, record, entryId: e.id, visitDate: e.appointmentDate, diagnosis: e.diagnosis, existing: e.prescription),
                   icon: const Icon(Icons.edit, size: 18), label: const Text('Uredi recept')),
                 TextButton.icon(

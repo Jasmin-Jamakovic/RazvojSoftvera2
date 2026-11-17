@@ -174,6 +174,7 @@ builder.Services.AddHttpClient<IGeocodingService, GeocodingService>();
 
 // Appointment reminders (24h / 1h before), run in the background inside the API.
 builder.Services.AddHostedService<AppointmentReminderService>();
+builder.Services.AddHostedService<eDoktor.Services.Payments.PaymentMaintenanceService>();
 
 // Appointment state machine
 builder.Services.AddScoped<InitialAppointmentState>();

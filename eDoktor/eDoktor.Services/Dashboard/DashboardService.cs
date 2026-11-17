@@ -1,14 +1,19 @@
 using eDoktor.Model;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using eDoktor.Model.Responses;
 using eDoktor.Services.AppointmentStateMachine;
 using eDoktor.Services.Database;
+using eDoktor.Services.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace eDoktor.Services.Dashboard
 {
+    // Money in every overview is counted the same way as in PaymentService.GetSummaryAsync:
+    // gross by the capture date, refunds by the refund date, net = gross - refunds of the same period.
+    // So a payment captured in one month and refunded in the next stays in the first month's gross.
     public class DashboardService : IDashboardService
     {
         private readonly eDoktorDbContext _db;
@@ -32,38 +37,14 @@ namespace eDoktor.Services.Dashboard
             var monthStart = DisplayTime.ToUtc(new DateTime(y, m, 1));
             var monthEnd = DisplayTime.ToUtc(new DateTime(y, m, 1).AddMonths(1));
 
-            var monthlyRevenue = await _db.PayPalPayments
-                .Where(p => p.Status == PaymentStatus.Captured && p.CapturedAt >= monthStart && p.CapturedAt < monthEnd)
-                .SumAsync(p => (decimal?)p.Amount) ?? 0m;
+            var gross = await GrossAsync(_db.PayPalPayments, monthStart, monthEnd);
+            var refunds = await RefundsAsync(_db.PayPalPayments, monthStart, monthEnd);
 
-            var rowsQ = _db.Doctors.Where(d => !d.IsDeleted);
-            if (specializationId.HasValue)
-                rowsQ = rowsQ.Where(d => d.DoctorSpecializations.Any(ds => ds.SpecializationId == specializationId.Value));
+            var specName = await SpecializationNameAsync(specializationId);
+            var rows = await DoctorRowsAsync(specializationId, specName, monthStart, monthEnd, completedInPeriodOnly: false);
+            rows = rows.OrderByDescending(x => x.Revenue).ToList();
 
-            var rows = await rowsQ
-                .Select(d => new DoctorRevenueRow
-                {
-                    DoctorId = d.Id,
-                    DoctorName = d.User.FirstName + " " + d.User.LastName,
-                    Specialization = d.DoctorSpecializations.Select(ds => ds.Specialization.Name).FirstOrDefault(),
-                    AppointmentCount = d.Appointments.Count(a => a.StateMachine == nameof(CompletedAppointmentState)),
-                    AverageRating = d.Reviews.Any(r => !r.IsDeleted)
-                        ? d.Reviews.Where(r => !r.IsDeleted).Average(r => (double)r.Rating)
-                        : 0,
-                    Revenue = d.Appointments
-                        .SelectMany(a => a.Payments)
-                        .Where(p => p.Status == PaymentStatus.Captured)
-                        .Sum(p => (decimal?)p.Amount) ?? 0m
-                })
-                .OrderByDescending(x => x.Revenue)
-                .ToListAsync();
-
-            var topSpec = await _db.Appointments
-                .GroupBy(a => a.Doctor.DoctorSpecializations.Select(ds => ds.Specialization.Name).FirstOrDefault())
-                .OrderByDescending(g => g.Count())
-                .Select(g => g.Key)
-                .FirstOrDefaultAsync();
-
+            var topSpec = await TopSpecializationAsync(_db.Appointments, specializationId, specName);
             var topRow = rows.OrderByDescending(r => r.AverageRating).FirstOrDefault();
 
             return new DashboardStatsResponse
@@ -72,7 +53,11 @@ namespace eDoktor.Services.Dashboard
                 TotalPatients = totalPatients,
                 TotalAppointments = totalAppointments,
                 AppointmentsToday = appointmentsToday,
-                RevenueThisMonth = monthlyRevenue,
+                MonthStart = monthStart,
+                MonthEnd = monthEnd,
+                GrossThisMonth = gross,
+                RefundsThisMonth = refunds,
+                RevenueThisMonth = gross - refunds,
                 TopSpecialization = topSpec,
                 TopDoctor = topRow?.DoctorName,
                 TopDoctorRating = topRow?.AverageRating ?? 0,
@@ -87,50 +72,19 @@ namespace eDoktor.Services.Dashboard
             if ((to - from).TotalDays > 366)
                 throw new UserException("Izvještaj se može generisati za period od najviše godinu dana.");
 
-            string? specName = null;
-            if (specializationId.HasValue)
-            {
-                specName = await _db.Specializations.Where(s => s.Id == specializationId.Value).Select(s => s.Name).FirstOrDefaultAsync()
-                    ?? throw new NotFoundException("Specijalizacija nije pronađena.");
-            }
+            var specName = await SpecializationNameAsync(specializationId);
 
-            const string completed = nameof(CompletedAppointmentState);
-            var doctors = _db.Doctors.Where(d => !d.IsDeleted);
-            if (specializationId.HasValue)
-                doctors = doctors.Where(d => d.DoctorSpecializations.Any(ds => ds.SpecializationId == specializationId.Value));
-
-            // Exams = completed appointments held in the period; revenue = PayPal payments captured
-            // in the period and not refunded; rating = the doctor's overall average from active reviews.
-            var rows = await doctors
-                .Select(d => new DoctorRevenueRow
-                {
-                    DoctorId = d.Id,
-                    DoctorName = d.User.FirstName + " " + d.User.LastName,
-                    Specialization = d.DoctorSpecializations.Select(ds => ds.Specialization.Name).FirstOrDefault(),
-                    AppointmentCount = d.Appointments.Count(a => a.StateMachine == completed
-                        && a.TimeSlot.StartUtc >= from && a.TimeSlot.StartUtc < to),
-                    AverageRating = d.Reviews.Any(r => !r.IsDeleted)
-                        ? d.Reviews.Where(r => !r.IsDeleted).Average(r => (double)r.Rating)
-                        : 0,
-                    Revenue = d.Appointments
-                        .SelectMany(a => a.Payments)
-                        .Where(p => p.Status == PaymentStatus.Captured && p.CapturedAt >= from && p.CapturedAt < to)
-                        .Sum(p => (decimal?)p.Amount) ?? 0m
-                })
+            // Exams = completed appointments held in the period; money as described at the top of the class;
+            // rating = the doctor's overall average from active reviews.
+            var rows = (await DoctorRowsAsync(specializationId, specName, from, to, completedInPeriodOnly: true))
                 .OrderByDescending(r => r.AppointmentCount)
                 .ThenByDescending(r => r.Revenue)
-                .ToListAsync();
+                .ToList();
 
+            const string completed = nameof(CompletedAppointmentState);
             var examsInPeriod = _db.Appointments.Where(a => a.StateMachine == completed
                 && a.TimeSlot.StartUtc >= from && a.TimeSlot.StartUtc < to);
-            if (specializationId.HasValue)
-                examsInPeriod = examsInPeriod.Where(a => a.Doctor.DoctorSpecializations.Any(ds => ds.SpecializationId == specializationId.Value));
-
-            var topSpec = await examsInPeriod
-                .GroupBy(a => a.Doctor.DoctorSpecializations.Select(ds => ds.Specialization.Name).FirstOrDefault())
-                .OrderByDescending(g => g.Count())
-                .Select(g => g.Key)
-                .FirstOrDefaultAsync();
+            var topSpec = await TopSpecializationAsync(examsInPeriod, specializationId, specName);
 
             var topDoctor = rows.Where(r => r.AverageRating > 0)
                 .OrderByDescending(r => r.AverageRating).ThenByDescending(r => r.AppointmentCount)
@@ -142,6 +96,8 @@ namespace eDoktor.Services.Dashboard
                 To = to,
                 SpecializationName = specName,
                 TotalExams = rows.Sum(r => r.AppointmentCount),
+                TotalGross = rows.Sum(r => r.GrossRevenue),
+                TotalRefunds = rows.Sum(r => r.Refunds),
                 TotalRevenue = rows.Sum(r => r.Revenue),
                 TopSpecialization = topSpec,
                 TopDoctor = topDoctor?.DoctorName,
@@ -149,5 +105,73 @@ namespace eDoktor.Services.Dashboard
                 Rows = rows
             };
         }
+
+        private async Task<string?> SpecializationNameAsync(int? specializationId)
+        {
+            if (!specializationId.HasValue) return null;
+            return await _db.Specializations.Where(s => s.Id == specializationId.Value).Select(s => s.Name).FirstOrDefaultAsync()
+                ?? throw new NotFoundException("Specijalizacija nije pronađena.");
+        }
+
+        // One row per active doctor (of the chosen specialization) with exams, rating and money for [from, to).
+        private async Task<List<DoctorRevenueRow>> DoctorRowsAsync(int? specializationId, string? specName, DateTime from, DateTime to, bool completedInPeriodOnly)
+        {
+            const string completed = nameof(CompletedAppointmentState);
+            var doctors = _db.Doctors.Where(d => !d.IsDeleted);
+            if (specializationId.HasValue)
+                doctors = doctors.Where(d => d.DoctorSpecializations.Any(ds => ds.SpecializationId == specializationId.Value));
+
+            var rows = await doctors
+                .Select(d => new DoctorRevenueRow
+                {
+                    DoctorId = d.Id,
+                    DoctorName = d.User.FirstName + " " + d.User.LastName,
+                    Specialization = d.DoctorSpecializations.OrderBy(ds => ds.Specialization.Name).Select(ds => ds.Specialization.Name).FirstOrDefault(),
+                    AppointmentCount = completedInPeriodOnly
+                        ? d.Appointments.Count(a => a.StateMachine == completed && a.TimeSlot.StartUtc >= from && a.TimeSlot.StartUtc < to)
+                        : d.Appointments.Count(a => a.StateMachine == completed),
+                    AverageRating = d.Reviews.Any(r => !r.IsDeleted)
+                        ? d.Reviews.Where(r => !r.IsDeleted).Average(r => (double)r.Rating)
+                        : 0,
+                    GrossRevenue = d.Appointments.SelectMany(a => a.Payments)
+                        .Where(p => p.CapturedAt != null && p.CapturedAt >= from && p.CapturedAt < to)
+                        .Sum(p => (decimal?)p.Amount) ?? 0m,
+                    Refunds = d.Appointments.SelectMany(a => a.Payments)
+                        .Where(p => p.Status == PaymentStatus.Refunded && p.RefundedAt >= from && p.RefundedAt < to)
+                        .Sum(p => (decimal?)p.Amount) ?? 0m
+                })
+                .ToListAsync();
+
+            foreach (var r in rows)
+            {
+                r.Revenue = r.GrossRevenue - r.Refunds;
+                // With a specialization filter the doctor is listed for that specialization, even when they also
+                // have others, so the column shows the filtered one (the same in the table and the PDF).
+                if (specName != null) r.Specialization = specName;
+            }
+            return rows;
+        }
+
+        // Most booked specialization. With a filter every counted appointment belongs to the chosen
+        // specialization, so that is the answer (when there is anything to count).
+        private static async Task<string?> TopSpecializationAsync(IQueryable<Appointment> appointments, int? specializationId, string? specName)
+        {
+            if (specializationId.HasValue)
+            {
+                var any = await appointments.AnyAsync(a => a.Doctor.DoctorSpecializations.Any(ds => ds.SpecializationId == specializationId.Value));
+                return any ? specName : null;
+            }
+            return await appointments
+                .GroupBy(a => a.Doctor.DoctorSpecializations.OrderBy(ds => ds.Specialization.Name).Select(ds => ds.Specialization.Name).FirstOrDefault())
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefaultAsync();
+        }
+
+        private static async Task<decimal> GrossAsync(IQueryable<PayPalPayment> payments, DateTime from, DateTime to) =>
+            await payments.Where(p => p.CapturedAt != null && p.CapturedAt >= from && p.CapturedAt < to).SumAsync(p => (decimal?)p.Amount) ?? 0m;
+
+        private static async Task<decimal> RefundsAsync(IQueryable<PayPalPayment> payments, DateTime from, DateTime to) =>
+            await payments.Where(p => p.Status == PaymentStatus.Refunded && p.RefundedAt >= from && p.RefundedAt < to).SumAsync(p => (decimal?)p.Amount) ?? 0m;
     }
 }

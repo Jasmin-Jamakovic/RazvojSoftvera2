@@ -48,7 +48,7 @@ namespace eDoktor.Services.Countries
             query = base.ApplyFilter(query, s);
             if (!string.IsNullOrWhiteSpace(s.Name))
                 query = query.Where(x => x.Name.Contains(s.Name));
-            return query.OrderBy(x => x.Name);
+            return query.OrderBy(x => x.Name).ThenBy(x => x.Id);
         }
     }
 }

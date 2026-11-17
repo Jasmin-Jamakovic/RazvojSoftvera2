@@ -26,13 +26,16 @@ class Prescription {
 class RecordEntry {
   final int id, appointmentId, doctorId;
   final DateTime appointmentDate;
-  final String? doctorName, specialization, diagnosis, therapy, notes;
+  final String? doctorName, specialization, diagnosis, therapy, notes, appointmentStatus;
   final Prescription? prescription;
-  RecordEntry({required this.id, required this.appointmentId, required this.doctorId, required this.appointmentDate, this.doctorName, this.specialization, this.diagnosis, this.therapy, this.notes, this.prescription});
+  RecordEntry({required this.id, required this.appointmentId, required this.doctorId, required this.appointmentDate, this.doctorName, this.specialization, this.diagnosis, this.therapy, this.notes, this.prescription, this.appointmentStatus});
+  /// Same rule as the server: a prescription belongs to a confirmed or completed exam, never a cancelled one.
+  bool get allowsPrescription => appointmentStatus == 'Confirmed' || appointmentStatus == 'Completed';
   factory RecordEntry.fromJson(Map<String, dynamic> j) => RecordEntry(
         id: j['id'], appointmentId: j['appointmentId'] ?? 0, doctorId: j['doctorId'] ?? 0,
         appointmentDate: _date(j['appointmentDate'])!, doctorName: j['doctorName'],
         specialization: j['specialization'], diagnosis: j['diagnosis'], therapy: j['therapy'], notes: j['notes'],
+        appointmentStatus: j['appointmentStatus'],
         prescription: j['prescription'] == null ? null : Prescription.fromJson(j['prescription']));
 }
 

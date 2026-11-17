@@ -36,7 +36,8 @@ Glavna content-based komponenta.
    - ključnih riječi iz **biografije** (`Bio`),
    - **grada** klinike.
 2. **Profil pacijenta** (`BuildPatientProfileAsync`) se gradi iz **stvarne historije** pacijenta:
-   - specijalizacija i biografija ljekara kod kojih je pacijent **ranije imao termine**,
+   - specijalizacija i biografija ljekara kod kojih je pacijent **ranije imao obavljen (završen) pregled**;
+     budući termini i otkazane rezervacije se ne računaju kao posjeta,
    - **ocjene koje je pacijent dao**: ljekar kojeg je ocijenio sa 4 ili 5 ulazi u profil **dvostruko**
      (jači signal interesa), a ljekar ocijenjen sa 1 ili 2 se **izostavlja** iz profila,
    - **dijagnoza, terapija i napomene** iz njegovog elektronskog kartona (`MedicalRecordEntry`),
@@ -89,14 +90,15 @@ preporuke je prikazan na svakoj kartici ljekara:
 
 Svi signali koji ulaze u scoring se **stvarno upisuju kroz aplikaciju** i **stvarno koriste**:
 
-- **Historija termina** – upisuje se pri svakom zakazivanju (`InitialAppointmentState`).
+- **Historija posjeta** – kao prethodna posjeta računa se samo **završen** pregled (`CompletedAppointmentState`).
 - **Historija pretraga** – svaka pretraga ljekara koju pacijent napravi (tekst i/ili specijalizacija) upisuje
   se u tabelu `SearchHistories` (`DoctorService.RecordSearchAsync`); uzastopno ponavljanje iste pretrage se
   ne upisuje dvaput.
 - **Recenzije/ocjene** – pacijent ih ostavlja nakon završenog pregleda (`ReviewService`); prosječna ocjena
   ljekara ulazi u `rating` komponentu, a ocjene koje je pacijent dao oblikuju njegov profil (`sim`).
 - **Stavke kartona** (dijagnoza/terapija/napomene) – upisuje ljekar.
-- **Lokacija i termini** – koordinate pacijenta/klinike i generisani slobodni termini.
+- **Lokacija i termini** – koordinate klinike i generisani slobodni termini; pacijent svoju lokaciju postavlja
+  u mobilnoj aplikaciji (Profil → Uredi profil → Lokacija za preporuke), pretragom adrese.
 
 Nijedan signal se ne prikuplja a zatim ignoriše – sve četiri komponente (`sim`, `rating`, `dist`, `avail`)
 ulaze u konačni `score`.
@@ -111,7 +113,10 @@ ulaze u konačni `score`.
   - zakazan novi termin (`InitialAppointmentState`),
   - završen pregled (`ConfirmedAppointmentState.CompleteAsync`),
   - nova recenzija (`ReviewService`),
-  - nova pretraga (`DoctorService.RecordSearchAsync`).
+  - nova pretraga (`DoctorService.RecordSearchAsync`),
+  - promjena lokacije pacijenta (`UserService.UpdateAsync`).
+- Prije vraćanja keširane liste provjerava se da su svi ljekari u njoj i dalje aktivni; ako je neki ljekar u
+  međuvremenu obrisan, keširana lista se odbacuje i preporuke se ponovo računaju samo od aktivnih ljekara.
 
 ## 6. Cold-start (pacijent bez historije)
 

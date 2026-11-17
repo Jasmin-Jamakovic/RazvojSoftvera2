@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/providers.dart';
 import '../utils/validators.dart';
+import '../widgets/forgot_password_dialog.dart';
 import 'shell_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -33,6 +34,13 @@ class _LoginScreenState extends State<LoginScreen> {
     finally { if (mounted) setState(() => _busy = false); }
   }
 
+  Future<void> _forgotPassword() async {
+    final done = await showDialog<bool>(context: context, builder: (_) => const ForgotPasswordDialog());
+    if (done == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lozinka je promijenjena. Prijavite se novom lozinkom.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -54,6 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
           if (_error != null) ...[const SizedBox(height: 12), Text(_error!, style: const TextStyle(color: Colors.red))],
           const SizedBox(height: 24),
           FilledButton(onPressed: _busy ? null : _login, child: Padding(padding: const EdgeInsets.symmetric(vertical: 14), child: Text(_busy ? '...' : 'Prijava'))),
+          const SizedBox(height: 8),
+          TextButton(onPressed: _busy ? null : _forgotPassword, child: const Text('Zaboravljena lozinka?')),
         ]))),
       ))),
     );

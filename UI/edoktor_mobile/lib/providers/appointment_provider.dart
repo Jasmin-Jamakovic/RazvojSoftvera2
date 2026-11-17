@@ -5,9 +5,18 @@ import '../models/appointment.dart';
 import '../services/api_client.dart';
 
 class AppointmentProvider extends ChangeNotifier {
-  Future<List<Appointment>> mine() async {
-    final res = await ApiClient.get('/api/appointments', query: {'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+  /// One page of the patient's own appointments. The server applies the upcoming/past split and the
+  /// ordering before paging (upcoming: nearest first, past: newest first), so every page belongs to the tab
+  /// and [total] is the size of the whole tab.
+  Future<({List<Appointment> items, int total})> mine({required bool upcoming, int page = 0, int pageSize = 20}) async {
+    final res = await ApiClient.get('/api/appointments', query: {
+      'period': upcoming ? 'upcoming' : 'past',
+      'sortAscending': upcoming,
+      'page': page,
+      'pageSize': pageSize,
+    });
+    final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
+    return (items: items, total: (res['totalCount'] as int?) ?? items.length);
   }
 
   Future<Appointment> create({required int doctorId, required int timeSlotId, required int type}) async {

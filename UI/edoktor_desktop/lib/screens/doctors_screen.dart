@@ -52,6 +52,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
     Uint8List? photo;
     String? photoError;
     final provider = context.read<DoctorProvider>();
+    Doctor? created;
     var saving = false;
     String? error;
 
@@ -170,7 +171,7 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
             set(() { saving = true; error = null; });
             try {
               if (d == null) {
-                await provider.create(body);
+                created = await provider.create(body);
               } else {
                 await provider.update(d.id, body);
               }
@@ -187,10 +188,27 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
 
     if (ok != true || !mounted) return;
     _refresh();
+    final emailFailed = d == null && created?.credentialsEmailSent == false;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(d == null
-        ? 'Ljekar je uspješno dodan. Privremena lozinka je poslana na ${email.text.trim()}.'
+        ? (emailFailed
+            ? 'Ljekar ${created!.fullName} je uspješno kreiran.'
+            : 'Ljekar je uspješno dodan. Privremena lozinka je poslana na ${email.text.trim()}.')
         : 'Podaci ljekara su uspješno ažurirani.')));
+    // The doctor is saved either way; only the email with the temporary password is missing.
+    if (emailFailed) await _showCredentialsWarning(created!, email.text.trim());
   }
+
+  Future<void> _showCredentialsWarning(Doctor doc, String email) => showDialog<void>(context: context, builder: (c) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 36),
+        title: const Text('Pristupni podaci nisu dostavljeni'),
+        content: SizedBox(width: 460, child: Text(
+          'Ljekar ${doc.fullName} je kreiran i nalazi se u listi, ali email sa privremenom lozinkom nije poslan na $email.\n\n'
+          'Nemojte ponovo unositi ljekara. Ljekar lozinku postavlja sam:\n'
+          '1. Na ekranu za prijavu odabere "Zaboravljena lozinka?".\n'
+          '2. Unese email $email i zatraži kod.\n'
+          '3. Unese kod iz emaila i novu lozinku, pa se prijavi.')),
+        actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Razumijem'))],
+      ));
 
   Future<void> _confirmDelete(Doctor d) async {
     final ok = await showDialog<bool>(context: context, builder: (c) => AlertDialog(
@@ -244,7 +262,12 @@ class _DoctorsScreenState extends State<DoctorsScreen> {
           DataColumn(label: Text('Foto')), DataColumn(label: Text('Ime')), DataColumn(label: Text('Specijalizacije')), DataColumn(label: Text('Klinika')), DataColumn(label: Text('Cijena')), DataColumn(label: Text('Ocjena')), DataColumn(label: Text('Akcije')),
         ], rows: list.map((d) => DataRow(cells: [
           DataCell(EntityAvatar(path: d.hasPhoto ? '/api/doctors/${d.id}/photo' : null, initials: _initials(d.firstName, d.lastName))),
-          DataCell(Text(d.fullName)),
+          // Editing is also reachable from the name (always visible), not only from the "Akcije" column,
+          // which needs horizontal scrolling on a narrow window.
+          DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(d.fullName),
+            IconButton(icon: const Icon(Icons.edit, size: 18), tooltip: 'Uredi ljekara', visualDensity: VisualDensity.compact, onPressed: () => _edit(d)),
+          ]), onTap: () => _edit(d)),
           DataCell(Text(d.specializations.map((s) => s.name).join(', '))),
           DataCell(Text(d.clinic?.name ?? '')),
           DataCell(Text('${d.consultationPrice.toStringAsFixed(0)} €')),

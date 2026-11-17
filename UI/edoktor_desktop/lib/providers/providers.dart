@@ -18,6 +18,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Requests a password reset code by email (the response is the same whether or not the account exists).
+  Future<void> forgotPassword(String email) => ApiClient.post('/api/auth/forgot-password', {'email': email.trim()});
+
+  Future<void> resetPassword({required String email, required String code, required String newPassword}) =>
+      ApiClient.post('/api/auth/reset-password', {'email': email.trim(), 'code': code.trim(), 'newPassword': newPassword});
+
   /// Ends the session on the server too (the token is revoked), then clears it locally.
   /// A failed server call (e.g. API unreachable) must not keep the admin logged in locally.
   Future<void> logout() async {
@@ -46,11 +52,24 @@ class DashboardProvider extends ChangeNotifier {
   }
 }
 
-class SpecializationProvider extends ChangeNotifier {
-  Future<List<Specialization>> list({String? name}) async {
-    final res = await ApiClient.get('/api/specializations', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => Specialization.fromJson(e)).toList();
+/// Reads every page of a list endpoint (the API returns at most 100 rows per page), so lists and pickers
+/// built from it contain all active records, not only the first page.
+Future<List<T>> _fetchAll<T>(String path, Map<String, dynamic> query, T Function(Map<String, dynamic>) map) async {
+  const pageSize = 100;
+  final all = <T>[];
+  for (var page = 0;; page++) {
+    final res = await ApiClient.get(path, query: {...query, 'page': page, 'pageSize': pageSize});
+    final items = (res['items'] as List? ?? []);
+    all.addAll(items.map((e) => map(e as Map<String, dynamic>)));
+    final total = res['totalCount'] as int?;
+    if (items.length < pageSize || (total != null && all.length >= total)) break;
   }
+  return all;
+}
+
+class SpecializationProvider extends ChangeNotifier {
+  Future<List<Specialization>> list({String? name}) =>
+      _fetchAll('/api/specializations', {'name': name?.isEmpty == true ? null : name}, Specialization.fromJson);
   Future<void> upsert({int? id, required String name, String? description}) async {
     final body = {'name': name, 'description': description};
     if (id == null) {
@@ -63,10 +82,8 @@ class SpecializationProvider extends ChangeNotifier {
 }
 
 class ClinicProvider extends ChangeNotifier {
-  Future<List<Clinic>> list({String? name}) async {
-    final res = await ApiClient.get('/api/clinics', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => Clinic.fromJson(e)).toList();
-  }
+  Future<List<Clinic>> list({String? name}) =>
+      _fetchAll('/api/clinics', {'name': name?.isEmpty == true ? null : name}, Clinic.fromJson);
   Future<void> upsert({int? id, required String name, required String address, required int cityId, double? latitude, double? longitude}) async {
     final body = {'name': name, 'address': address, 'cityId': cityId, 'latitude': latitude, 'longitude': longitude};
     if (id == null) {
@@ -85,10 +102,8 @@ class ClinicProvider extends ChangeNotifier {
 }
 
 class CountryProvider extends ChangeNotifier {
-  Future<List<Country>> list({String? name}) async {
-    final res = await ApiClient.get('/api/countries', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => Country.fromJson(e)).toList();
-  }
+  Future<List<Country>> list({String? name}) =>
+      _fetchAll('/api/countries', {'name': name?.isEmpty == true ? null : name}, Country.fromJson);
   Future<void> upsert({int? id, required String name}) async {
     final body = {'name': name};
     if (id == null) {
@@ -101,10 +116,8 @@ class CountryProvider extends ChangeNotifier {
 }
 
 class CityProvider extends ChangeNotifier {
-  Future<List<City>> list({String? name, int? countryId}) async {
-    final res = await ApiClient.get('/api/cities', query: {'name': name?.isEmpty == true ? null : name, 'countryId': countryId, 'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => City.fromJson(e)).toList();
-  }
+  Future<List<City>> list({String? name, int? countryId}) =>
+      _fetchAll('/api/cities', {'name': name?.isEmpty == true ? null : name, 'countryId': countryId}, City.fromJson);
   Future<void> upsert({int? id, required String name, required int countryId}) async {
     final body = {'name': name, 'countryId': countryId};
     if (id == null) {
@@ -117,10 +130,8 @@ class CityProvider extends ChangeNotifier {
 }
 
 class DoctorProvider extends ChangeNotifier {
-  Future<List<Doctor>> list({String? name}) async {
-    final res = await ApiClient.get('/api/doctors', query: {'name': name?.isEmpty == true ? null : name, 'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => Doctor.fromJson(e)).toList();
-  }
+  Future<List<Doctor>> list({String? name}) =>
+      _fetchAll('/api/doctors', {'name': name?.isEmpty == true ? null : name}, Doctor.fromJson);
   Future<Doctor> create(Map<String, dynamic> body) async {
     final res = await ApiClient.post('/api/doctors', body);
     return Doctor.fromJson(res);
@@ -161,9 +172,13 @@ class DoctorProvider extends ChangeNotifier {
 }
 
 class PatientProvider extends ChangeNotifier {
-  Future<List<User>> list({String? search}) async {
-    final res = await ApiClient.get('/api/users', query: {'role': 'patient', 'search': search?.isEmpty == true ? null : search, 'pageSize': 100});
-    return (res['items'] as List? ?? []).map((e) => User.fromJson(e)).toList();
+  /// One page of patients; the server searches all patients and sorts them (last name, first name) before paging.
+  Future<PagedList<User>> page({String? search, int page = 0, int pageSize = 20}) async {
+    final res = await ApiClient.get('/api/users', query: {
+      'role': 'patient', 'search': search?.trim().isEmpty == true ? null : search?.trim(), 'page': page, 'pageSize': pageSize,
+    });
+    final items = (res['items'] as List? ?? []).map((e) => User.fromJson(e)).toList();
+    return PagedList(items, res['totalCount'] ?? items.length);
   }
 
   Future<PagedList<Appointment>> visits(int patientId, {int page = 0, int pageSize = 10}) async {
@@ -233,9 +248,11 @@ class MedicalRecordProvider extends ChangeNotifier {
 
 class AppointmentProvider extends ChangeNotifier {
   /// One page of appointments (for a doctor the API returns only their own).
-  Future<PagedList<Appointment>> list({String? status, DateTime? from, DateTime? to, bool sortAscending = false, int page = 0, int pageSize = 20}) async {
+  /// [patientName] is filtered on the server before paging, so a match on any page is found.
+  Future<PagedList<Appointment>> list({String? status, DateTime? from, DateTime? to, String? patientName, bool sortAscending = false, int page = 0, int pageSize = 20}) async {
     final res = await ApiClient.get('/api/appointments', query: {
       'status': status, 'from': from?.toUtc().toIso8601String(), 'to': to?.toUtc().toIso8601String(),
+      'patientName': (patientName?.trim().isEmpty ?? true) ? null : patientName!.trim(),
       'sortAscending': sortAscending, 'page': page, 'pageSize': pageSize,
     });
     final items = (res['items'] as List? ?? []).map((e) => Appointment.fromJson(e)).toList();
@@ -323,7 +340,10 @@ class PaymentProvider extends ChangeNotifier {
     return PaymentSummary.fromJson(res);
   }
 
-  Future<void> refund(String captureId, {String? reason}) async {
-    await ApiClient.post('/api/payments/paypal/captures/$captureId/refund', {'reason': reason});
+  /// Returns the payment's new status: 'Refunded' when PayPal confirmed the money is back,
+  /// 'RefundPending' when PayPal accepted the refund but has not finished it yet.
+  Future<String> refund(String captureId, {String? reason}) async {
+    final res = await ApiClient.post('/api/payments/paypal/captures/$captureId/refund', {'reason': reason});
+    return (res?['status'] as String?) ?? 'Refunded';
   }
 }

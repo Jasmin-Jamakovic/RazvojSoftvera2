@@ -11,7 +11,14 @@ namespace eDoktor.API.Controllers
     [Route("api/cities"), Authorize]
     public class CitiesController : BaseCRUDController<CityResponse, CitySearchObject, CityUpsertRequest, CityUpsertRequest>
     {
-        public CitiesController(ICityService s) : base(s) { }
+        private readonly ICityService _cities;
+
+        public CitiesController(ICityService s) : base(s) { _cities = s; }
+
+        // Registration happens before login, so the city picker needs a list it can read without a token.
+        // Only id + name of active cities are exposed here; the full CRUD list stays behind [Authorize].
+        [HttpGet("lookup"), AllowAnonymous]
+        public System.Threading.Tasks.Task<System.Collections.Generic.List<CityLookupResponse>> Lookup() => _cities.GetActiveLookupAsync();
 
         [HttpPost, Authorize(Roles = Roles.Admin)]
         public override System.Threading.Tasks.Task<CityResponse> Create(CityUpsertRequest request) => base.Create(request);

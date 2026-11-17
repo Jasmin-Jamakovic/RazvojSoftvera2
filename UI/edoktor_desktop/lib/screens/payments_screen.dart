@@ -104,8 +104,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<PaymentProvider>().refund(p.captureId!, reason: reason);
-      messenger.showSnackBar(SnackBar(content: Text('Povrat od ${_money.format(p.amount)} je uspješno izvršen.')));
+      final status = await context.read<PaymentProvider>().refund(p.captureId!, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text(refundResultMessage(status))));
       _refresh();
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
@@ -114,12 +114,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   String _refundBlockedReason(Payment p) => switch (p.status) {
         'Refunded' => 'Povrat je već izvršen.',
+        'RefundPending' => 'Povrat je u obradi kod PayPala.',
         'Created' => 'Uplata nije naplaćena.',
         'Cancelled' => 'Pacijent nije završio plaćanje.',
-        _ => 'Povrat je moguć samo za otkazane termine.',
+        _ => p.appointmentStatus == 'Cancelled'
+            ? 'Pacijent je otkazao termin manje od 24 sata prije početka – nema pravo na povrat.'
+            : 'Povrat je moguć samo za otkazane termine.',
       };
 
-  Color _statusColor(String s) => switch (s) { 'Captured' => Colors.green, 'Created' => Colors.orange, 'Refunded' => Colors.blueGrey, _ => Colors.grey };
+  Color _statusColor(String s) => switch (s) { 'Captured' => Colors.green, 'Created' => Colors.orange, 'Refunded' => Colors.blueGrey, 'RefundPending' => Colors.deepPurple, _ => Colors.grey };
+
+  String get _periodLabel => _range == null ? 'svi datumi' : '${_date.format(_range!.start)} – ${_date.format(_range!.end)}';
 
   @override
   Widget build(BuildContext context) {
@@ -152,6 +157,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             DropdownMenuItem(value: 'Captured', child: Text('Naplaćeno')),
             DropdownMenuItem(value: 'Created', child: Text('Na čekanju')),
             DropdownMenuItem(value: 'Refunded', child: Text('Vraćeno')),
+            DropdownMenuItem(value: 'RefundPending', child: Text('Povrat u obradi')),
             DropdownMenuItem(value: 'Cancelled', child: Text('Napušteno')),
           ],
           onChanged: (v) { setState(() => _status = v); _refresh(resetPage: true); },
@@ -172,16 +178,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         final (page, summary) = s.data!;
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Wrap(spacing: 16, runSpacing: 16, children: [
-            _stat('Ukupno naplaćeno', _money.format(summary.totalCaptured), Icons.payments),
-            _stat('Vraćeno (refund)', _money.format(summary.totalRefunded), Icons.undo),
-            _stat('Neto prihod', _money.format(summary.netRevenue), Icons.account_balance_wallet),
+            // Each amount says which date it is counted by and which period it covers.
+            _stat('Bruto naplata', _money.format(summary.totalCaptured), Icons.payments, note: 'po datumu naplate · $_periodLabel'),
+            _stat('Povrati', _money.format(summary.totalRefunded), Icons.undo, note: 'po datumu povrata · $_periodLabel'),
+            _stat('Neto prihod', _money.format(summary.netRevenue), Icons.account_balance_wallet, note: 'bruto − povrati · $_periodLabel'),
             _stat('Transakcije', '${summary.capturedCount} naplaćeno · ${summary.refundedCount} vraćeno · ${summary.pendingCount} na čekanju', Icons.receipt_long, wide: true),
           ]),
           const SizedBox(height: 16),
           Expanded(child: Card(child: page.items.isEmpty
               ? const Center(child: Text('Nema transakcija za odabrane filtere.'))
               : SingleChildScrollView(child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(columns: const [
-                  DataColumn(label: Text('Datum uplate')),
+                  DataColumn(label: Text('Naplaćeno')),
+                  DataColumn(label: Text('Vraćeno')),
                   DataColumn(label: Text('Pacijent')),
                   DataColumn(label: Text('Ljekar')),
                   DataColumn(label: Text('Termin')),
@@ -190,7 +198,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   DataColumn(label: Text('Status termina')),
                   DataColumn(label: Text('Akcije')),
                 ], rows: page.items.map((p) => DataRow(cells: [
-                  DataCell(Text(_dateTime.format(p.createdAt))),
+                  DataCell(Text(p.capturedAt == null ? '-' : _dateTime.format(p.capturedAt!))),
+                  DataCell(Text(p.refundedAt == null ? '-' : _dateTime.format(p.refundedAt!))),
                   DataCell(Text(p.patientName ?? '-')),
                   DataCell(Text(p.doctorName ?? '-')),
                   DataCell(Text(p.appointmentStart == null ? '-' : _dateTime.format(p.appointmentStart!))),
@@ -231,13 +240,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     ]);
   }
 
-  Widget _stat(String label, String value, IconData icon, {bool wide = false}) => Container(
+  Widget _stat(String label, String value, IconData icon, {bool wide = false, String? note}) => Container(
     width: wide ? 420 : 220, padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))]),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [Icon(icon, color: const Color(0xFF2E7D32)), const SizedBox(width: 8), Text(label, style: const TextStyle(color: Colors.grey))]),
       const SizedBox(height: 8),
       Text(value, style: TextStyle(fontSize: wide ? 15 : 22, fontWeight: FontWeight.bold)),
+      if (note != null) ...[const SizedBox(height: 4), Text(note, style: const TextStyle(fontSize: 11, color: Colors.grey))],
     ]),
   );
 }

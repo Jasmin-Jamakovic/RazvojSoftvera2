@@ -10,6 +10,8 @@ class User {
   final String? allergies;
   final int? cityId;
   final String? cityName;
+  /// Patient's own location (used by the recommender's distance factor); null when not set.
+  final double? latitude, longitude;
   final int roleId;
   final String? role;
   /// Base64-encoded profile image (maps to the API's byte[] Image field). Null when unset.
@@ -27,6 +29,8 @@ class User {
     this.allergies,
     this.cityId,
     this.cityName,
+    this.latitude,
+    this.longitude,
     required this.roleId,
     this.role,
     this.image,
@@ -46,6 +50,8 @@ class User {
         allergies: json['allergies'],
         cityId: json['cityId'],
         cityName: json['cityName'],
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
         roleId: json['roleId'] ?? 0,
         role: json['role'],
         image: json['image'] as String?,
@@ -63,6 +69,8 @@ class User {
         'allergies': allergies,
         'cityId': cityId,
         'cityName': cityName,
+        'latitude': latitude,
+        'longitude': longitude,
         'roleId': roleId,
         'role': role,
         'image': image,

@@ -15,6 +15,8 @@ class Appointment {
   final int? reviewRating;
   final String? cancellationReason;
   final String? rescheduleReason;
+  /// While unpaid: the moment after which the booking is cancelled automatically and the slot released.
+  final DateTime? paymentDue;
 
   Appointment({
     required this.id, required this.patientId, this.patientName,
@@ -22,7 +24,7 @@ class Appointment {
     required this.startUtc, required this.endUtc,
     required this.type, required this.status, required this.price,
     this.videoRoomId, this.payment, this.isPaid = false, this.reviewRating,
-    this.cancellationReason, this.rescheduleReason,
+    this.cancellationReason, this.rescheduleReason, this.paymentDue,
   });
 
   bool get isOnline => type == 1;
@@ -46,5 +48,6 @@ class Appointment {
         reviewRating: j['reviewRating'],
         cancellationReason: j['cancellationReason'],
         rescheduleReason: j['rescheduleReason'],
+        paymentDue: j['paymentDueUtc'] == null ? null : DateTime.parse(j['paymentDueUtc']).toLocal(),
       );
 }

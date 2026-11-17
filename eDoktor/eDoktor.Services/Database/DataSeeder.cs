@@ -289,12 +289,15 @@ namespace eDoktor.Services.Database
 
             // ---- Pending appointments (booked, waiting for PayPal payment), 2–9 days ahead.
             //      The mobile patient has one with the "doctor" login so the pay → cancel → refund flow can be tried.
-            var pendingForMobile = Book(mobile, drMehic, today.AddDays(2).AddHours(15), AppointmentType.Online, "PendingAppointmentState", today);
+            //      Booked "now", so they stay payable for the whole payment window (PaymentRules.PaymentWindow)
+            //      after the database is seeded; unpaid ones are then released automatically.
+            var bookedAt = DateTime.UtcNow;
+            var pendingForMobile = Book(mobile, drMehic, today.AddDays(2).AddHours(15), AppointmentType.Online, "PendingAppointmentState", bookedAt);
             for (int i = 0; i < 4; i++)
             {
                 var patient = patients[(i + 3) % patients.Count];
                 var doctor = doctors[(i + 5) % doctors.Count];
-                Book(patient, doctor, today.AddDays(4 + i).AddHours(15).AddMinutes(30), AppointmentType.InPerson, "PendingAppointmentState", today);
+                Book(patient, doctor, today.AddDays(4 + i).AddHours(15).AddMinutes(30), AppointmentType.InPerson, "PendingAppointmentState", bookedAt);
             }
 
             // ---- For the "doctor" login: a paid online consultation that already took place but is not closed yet

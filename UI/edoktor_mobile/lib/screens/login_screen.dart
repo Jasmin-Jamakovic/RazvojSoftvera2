@@ -113,8 +113,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           controller: _user,
                           autovalidateMode: AutovalidateMode.onUserInteraction,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(labelText: 'Korisničko ime', prefixIcon: Icon(Icons.person_outline)),
-                          validator: (v) => Validators.required(v, 'Korisničko ime'),
+                          keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          decoration: const InputDecoration(labelText: 'Email ili korisničko ime', prefixIcon: Icon(Icons.alternate_email)),
+                          // An entry with "@" is treated as an email address and must be a valid one.
+                          validator: (v) => (v ?? '').contains('@')
+                              ? Validators.email(v)
+                              : Validators.required(v, 'Email ili korisničko ime'),
                         ),
                         const SizedBox(height: 14),
                         TextFormField(

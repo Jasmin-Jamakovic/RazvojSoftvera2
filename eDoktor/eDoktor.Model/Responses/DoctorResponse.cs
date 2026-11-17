@@ -26,5 +26,9 @@ namespace eDoktor.Model.Responses
 
         // Used when produced by the recommender.
         public string? RecommendationReason { get; set; }
+
+        // Set only in the response to creating a doctor: false when the email with the temporary password
+        // could not be queued. The doctor is still created; the admin is told to use the password reset.
+        public bool? CredentialsEmailSent { get; set; }
     }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +24,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
   static const _pageSize = 20;
 
   final _search = TextEditingController();
+  Timer? _searchDebounce;
   String? _status;
   _Period _period = _Period.upcoming;
   int _page = 0;
@@ -31,7 +33,14 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
   @override
   void initState() { super.initState(); _refresh(); }
   @override
-  void dispose() { _search.dispose(); super.dispose(); }
+  void dispose() { _searchDebounce?.cancel(); _search.dispose(); super.dispose(); }
+
+  /// A new search goes back to the first page; it runs shortly after typing stops.
+  void _onSearchChanged() {
+    setState(() {});
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () { if (mounted) _refresh(resetPage: true); });
+  }
 
   void _refresh({bool resetPage = false}) {
     if (resetPage) _page = 0;
@@ -39,6 +48,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
     setState(() {
       _f = context.read<AppointmentProvider>().list(
         status: _status,
+        patientName: _search.text,
         from: _period == _Period.upcoming ? now : null,
         to: _period == _Period.past ? now : null,
         // Upcoming: nearest appointment first.
@@ -135,9 +145,10 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
             hintText: 'Pretraga po imenu pacijenta...',
             prefixIcon: const Icon(Icons.search),
             isDense: true, border: const OutlineInputBorder(),
-            suffixIcon: _search.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(_search.clear)),
+            suffixIcon: _search.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear), onPressed: () { _search.clear(); _onSearchChanged(); }),
           ),
-          onChanged: (_) => setState(() {}),
+          onChanged: (_) => _onSearchChanged(),
+          onSubmitted: (_) { _searchDebounce?.cancel(); _refresh(resetPage: true); },
         )),
         DropdownButton<String?>(
           value: _status,
@@ -165,18 +176,19 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
         if (s.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
         if (s.hasError) return Center(child: Text('${s.error}', style: const TextStyle(color: Colors.red)));
         final data = s.data!;
-        final q = _search.text.trim().toLowerCase();
-        // The API has no patient-name filter, so the search runs over the loaded page.
-        final list = q.isEmpty ? data.items : data.items.where((a) => (a.patientName ?? '').toLowerCase().contains(q)).toList();
+        final q = _search.text.trim();
+        // The patient-name filter is applied by the server before paging; the total counts only matches.
+        final list = data.items;
         final first = data.items.isEmpty ? 0 : _page * _pageSize + 1;
         final last = _page * _pageSize + data.items.length;
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Expanded(child: list.isEmpty
-              ? Center(child: Text(q.isEmpty ? 'Nema termina.' : 'Nema termina za pacijenta "${_search.text.trim()}" na ovoj strani.'))
+              ? Center(child: Text(q.isEmpty ? 'Nema termina.' : 'Nema termina za pacijenta "$q".'))
               : ListView.separated(itemCount: list.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (c, i) {
                   final a = list[i];
                   final started = !a.startUtc.isAfter(DateTime.now());
                   final active = a.status == 'Pending' || a.status == 'Confirmed';
+                  final recordOpen = a.status == 'Confirmed' || a.status == 'Completed';
                   return ListTile(
                     leading: Container(width: 8, height: 40, color: _color(a.status)),
                     title: Text(a.patientName ?? 'Pacijent'),
@@ -195,7 +207,12 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen> {
                         TextButton(onPressed: () => _cancel(a), child: const Text('Otkaži', style: TextStyle(color: Colors.red))),
                       if (a.isOnline)
                         IconButton(icon: const Icon(Icons.chat_outlined), tooltip: 'Chat sa pacijentom', onPressed: () => _openChat(a)),
-                      OutlinedButton.icon(onPressed: () => _openRecord(a), icon: const Icon(Icons.folder_shared, size: 18), label: const Text('Karton pacijenta')),
+                      // Same rule as the server: the record opens through a confirmed or completed consultation.
+                      Tooltip(
+                        message: recordOpen ? 'Otvori karton pacijenta' : 'Karton je dostupan kroz potvrđen ili obavljen pregled.',
+                        child: OutlinedButton.icon(onPressed: recordOpen ? () => _openRecord(a) : null,
+                            icon: const Icon(Icons.folder_shared, size: 18), label: const Text('Karton pacijenta')),
+                      ),
                     ]),
                   );
                 })),

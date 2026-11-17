@@ -91,7 +91,14 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
     final reason = await showRefundReasonDialog(context,
         message: 'Vratiti ${a.price.toStringAsFixed(2)} € pacijentu ${a.patientName ?? ''} putem PayPal-a? Ova akcija je nepovratna.');
     if (reason == null || !mounted) return;
-    await _run(() => context.read<PaymentProvider>().refund(captureId, reason: reason), 'Povrat sredstava je izvršen.');
+    final payments = context.read<PaymentProvider>();
+    try {
+      final status = await payments.refund(captureId, reason: reason);
+      if (mounted) _snack(refundResultMessage(status));
+      _refresh();
+    } catch (e) {
+      if (mounted) _snack('$e');
+    }
   }
 
   Future<void> _reschedule(Appointment a) async {
@@ -168,7 +175,6 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
         return ListView.separated(itemCount: list.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (c, i) {
           final a = list[i];
           final capt = a.payment?['captureId'] as String?;
-          final paid = a.payment?['status'] == 'Captured';
           final upcoming = a.startUtc.isAfter(DateTime.now());
           return ListTile(
             onTap: () => _details(a),
@@ -189,7 +195,7 @@ class _AppointmentsScreenState extends State<AppointmentsScreen> {
               ),
               if (a.status == 'Pending' || a.status == 'Confirmed')
                 TextButton(onPressed: () => _cancel(a), child: const Text('Otkaži', style: TextStyle(color: Colors.red))),
-              if (capt != null && paid && a.status == 'Cancelled')
+              if (capt != null && a.canRefund)
                 TextButton(onPressed: () => _refund(a, capt), child: const Text('Povrat')),
             ]),
           );

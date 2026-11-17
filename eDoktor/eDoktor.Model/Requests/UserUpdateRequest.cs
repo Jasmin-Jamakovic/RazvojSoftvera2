@@ -37,6 +37,9 @@ namespace eDoktor.Model.Requests
         [Range(-180, 180, ErrorMessage = "Geografska dužina mora biti između -180 i 180.")]
         public double? Longitude { get; set; }
 
+        // true = remove the saved location (Latitude/Longitude null means "not sent, keep as is").
+        public bool? ClearLocation { get; set; }
+
         public bool? ReceiveNotifications { get; set; }
         public byte[]? Image { get; set; }
     }
